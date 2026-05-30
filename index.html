@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Погода · Сосновый Бор и Санкт-Петербург</title>
+
+  <!-- PWA: установка как приложение на Android / iOS -->
+  <meta name="theme-color" content="#1a2a52" />
+  <meta name="description" content="Точный прогноз погоды для Соснового Бора и Санкт-Петербурга: когда ждать осадки, почасовой прогноз и неделя." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Погода" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Анимированный фон -->
+  <div class="sky" id="sky"></div>
+  <div class="stars" id="stars"></div>
+  <div class="particles" id="particles"></div>
+  <div class="sun-moon" id="sunMoon"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">☁</span>
+      <div>
+        <h1>Погода</h1>
+        <p class="subtitle">Сосновый Бор · Санкт-Петербург</p>
+      </div>
+    </div>
+    <div class="status">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="updated" id="updated">
+        <span class="pulse" id="pulse"></span>
+        <span id="updatedText">загрузка…</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid" id="cards">
+    <!-- Карточки городов рендерятся из app.js -->
+  </main>
+
+  <!-- Блок преимуществ -->
+  <section class="advantages">
+    <h2 class="adv-title">🏆 Почему мы точнее Яндекс Погоды</h2>
+    <div class="adv-grid">
+      <div class="adv-card">
+        <div class="adv-icon">🌍</div>
+        <h3>Европейская модель ECMWF</h3>
+        <p>Используем данные Европейского центра среднесрочных прогнозов — самую точную метеомодель в мире. Яндекс использует коммерческую модель Meteum.</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">⚡</div>
+        <h3>Обновление каждые 3 минуты</h3>
+        <p>Данные обновляются в 2 раза чаще, чем у Яндекса. Вы всегда видите актуальную погоду.</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">📅</div>
+        <h3>Прогноз на 14 дней</h3>
+        <p>Яндекс показывает только 10 дней. Мы даём прогноз на 2 недели вперёд с детализацией по часам.</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">🎯</div>
+        <h3>15-минутный нау-каст</h3>
+        <p>Точное время начала и окончания осадков с точностью до 15 минут. Яндекс даёт только почасовой прогноз.</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">💧</div>
+        <h3>Детальный анализ осадков</h3>
+        <p>Показываем когда именно ждать дождь: утром, днём или вечером. Плюс вероятность и количество осадков по часам.</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">🔬</div>
+        <h3>Больше параметров</h3>
+        <p>Точка росы, облачность, видимость, направление ветра, порывы — всё что нужно для точного прогноза.</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">🚀</div>
+        <h3>24-часовой прогноз</h3>
+        <p>Почасовой прогноз на сутки вперёд вместо стандартных 12 часов. Планируйте день заранее!</p>
+      </div>
+      <div class="adv-card">
+        <div class="adv-icon">🆓</div>
+        <h3>Без рекламы и трекинга</h3>
+        <p>Никаких баннеров, счётчиков и слежки. Только чистая погода на открытых данных.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>Данные: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (ECMWF)</span>
+    <span>·</span>
+    <span>Обновление каждые 3 минуты · Прогноз на 14 дней · 24-часовой детальный прогноз</span>
+    <a class="creator" href="https://t.me/kklaw2" target="_blank" rel="noopener" title="Создатель в Telegram">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.94 4.6 18.6 20.3c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.44 2.35c-.27.27-.5.5-1.02.5l.36-5.14L17.99 6.4c.41-.36-.09-.56-.63-.2L6.83 13.04l-4.97-1.55c-1.08-.34-1.1-1.08.23-1.6L20.5 3.07c.9-.34 1.69.2 1.44 1.53z"/></svg>
+      @kklaw2
+    </a>
+    <button id="refreshBtn" class="refresh" title="Обновить сейчас">⟳ Обновить</button>
+  </footer>
+
+  <!-- Шаблон карточки города -->
+  <template id="cardTemplate">
+    <article class="card">
+      <div class="card-glow"></div>
+      <div class="card-head">
+        <div class="city">
+          <h2 class="city-name"></h2>
+          <p class="city-time"></p>
+        </div>
+        <div class="now-icon"></div>
+      </div>
+
+      <div class="now">
+        <div class="temp-wrap">
+          <span class="temp"></span>
+          <span class="deg">°</span>
+        </div>
+        <div class="now-meta">
+          <p class="desc"></p>
+          <p class="feels">ощущается как <b class="feels-val"></b>°</p>
+          <p class="range"><span class="t-max"></span>° / <span class="t-min"></span>°</p>
+        </div>
+      </div>
+
+      <!-- Когда ждать осадки -->
+      <div class="precip-block">
+        <div class="precip-top">
+          <span class="precip-ico">💧</span>
+          <span class="precip-headline"></span>
+        </div>
+        <div class="precip-lines"></div>
+      </div>
+
+      <div class="details">
+        <div class="detail"><span class="d-label">Ветер</span><span class="d-val wind"></span></div>
+        <div class="detail"><span class="d-label">Порывы</span><span class="d-val gusts"></span></div>
+        <div class="detail"><span class="d-label">Влажность</span><span class="d-val humidity"></span></div>
+        <div class="detail"><span class="d-label">Давление</span><span class="d-val pressure"></span></div>
+        <div class="detail"><span class="d-label">Осадки сейчас</span><span class="d-val precip"></span></div>
+        <div class="detail"><span class="d-label">УФ-индекс</span><span class="d-val uv"></span></div>
+        <div class="detail"><span class="d-label">Восход</span><span class="d-val sunrise"></span></div>
+        <div class="detail"><span class="d-label">Закат</span><span class="d-val sunset"></span></div>
+      </div>
+
+      <div class="section-title">Почасовой прогноз</div>
+      <div class="hourly"></div>
+
+      <div class="section-title">На 14 дней</div>
+      <div class="daily"></div>
+    </article>
+  </template>
+
+  <!-- Инструкция по установке (для iOS и браузеров без авто-установки) -->
+  <div class="sheet" id="installSheet" hidden>
+    <div class="sheet-card">
+      <button class="sheet-close" aria-label="Закрыть">✕</button>
+      <h3>Установить приложение</h3>
+      <p class="sheet-sub">Добавьте «Погоду» на главный экран — она откроется как обычное приложение, на весь экран и без браузера.</p>
+      <ol class="sheet-steps"></ol>
+      <p class="sheet-note">Совет: приложение должно открываться по ссылке (https://…), а не как файл с диска — иначе установка недоступна.</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

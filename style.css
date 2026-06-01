@@ -57,10 +57,13 @@ body.is-night .stars { opacity: 0.8; }
 .sun-moon {
   position: fixed; top: 8%; right: 12%;
   width: 120px; height: 120px; border-radius: 50%;
-  z-index: -2; filter: blur(2px); transition: all 1.6s ease;
+  z-index: -2; filter: blur(2px);
+  /* Скрыто до применения фона под погоду — чтобы при загрузке не вспыхивало большое солнце */
+  opacity: 0; transition: opacity 1.2s ease, background 1.6s ease, box-shadow 1.6s ease, top 1.6s ease, right 1.6s ease;
   background: radial-gradient(circle at 50% 50%, #ffe9a8, #ffd166 55%, rgba(255,209,102,0));
   box-shadow: 0 0 90px 30px rgba(255, 220, 130, 0.55);
 }
+body.ready .sun-moon { opacity: 1; }
 body.is-night .sun-moon {
   background: radial-gradient(circle at 38% 38%, #f4f7ff, #c8d2e6 60%, rgba(200,210,230,0));
   box-shadow: 0 0 70px 14px rgba(200, 215, 245, 0.4);
@@ -141,6 +144,37 @@ body.is-night .sun-moon {
   from { opacity: 0.6; transform: scale(1); }
   to { opacity: 1; transform: scale(1.1); }
 }
+
+/* ---------- Скелетон загрузки (вместо пустого экрана и резкого скачка) ---------- */
+.card.skeleton { pointer-events: none; }
+.card.skeleton .now { margin-bottom: 22px; }
+.sk {
+  position: relative; overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+.sk::after {
+  content: ""; position: absolute; inset: 0;
+  transform: translateX(-100%); will-change: transform;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.13), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+.sk-text   { display: inline-block; height: 12px; border-radius: 6px; vertical-align: middle; }
+.sk-circle { width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0; }
+.sk-temp   { width: 130px; height: 72px; border-radius: 16px; }
+.sk-bar    { width: 100%; border-radius: 18px; }
+.sk-detail { height: 54px; border-radius: 16px; }
+.sk-hour   { flex: 0 0 62px; height: 98px; border-radius: 16px; }
+.sk-day    { height: 52px; border-radius: 15px; }
+/* Раскладка внутри скелетона, чтобы заглушка совпадала с реальной карточкой */
+.card.skeleton .city { display: flex; flex-direction: column; align-items: flex-start; }
+.card.skeleton .now { align-items: flex-start; }
+.card.skeleton .now-meta { display: flex; flex-direction: column; gap: 9px; }
+.card.skeleton .details { margin-bottom: 22px; }
+.card.skeleton .section-title { margin-top: 4px; }
+.hourly.sk-row { overflow: hidden; }
+.hourly.sk-row .sk-hour:first-child { margin-left: 0; }
 
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; }
 .city-name { font-size: 22px; font-weight: 700; }
@@ -283,6 +317,32 @@ body.is-night .sun-moon {
   background: linear-gradient(90deg, #6bd6ff, #ffd166, #ff7b6b);
 }
 
+/* ---------- Блок преимуществ ---------- */
+.advantages {
+  max-width: 1180px; margin: 42px auto 0;
+  animation: fade-up .7s ease both;
+}
+.adv-title {
+  font-size: clamp(19px, 4.5vw, 25px); font-weight: 800; letter-spacing: -0.5px;
+  text-align: center; margin-bottom: 22px;
+}
+.adv-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
+}
+.adv-card {
+  background: var(--glass); border: 1px solid var(--border); border-radius: 20px;
+  padding: 20px 18px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
+}
+.adv-card:hover {
+  transform: translateY(-3px); background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+}
+.adv-icon { font-size: 28px; margin-bottom: 10px; line-height: 1; }
+.adv-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 7px; letter-spacing: -0.2px; }
+.adv-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
 /* ---------- Подвал ---------- */
 .foot {
   max-width: 1180px; margin: 30px auto 0;
@@ -331,6 +391,12 @@ body.is-night .sun-moon {
   .topbar { margin-bottom: 18px; }
   .details { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .now-icon { width: 56px; height: 56px; }
+  .sk-circle { width: 56px; height: 56px; }
+  /* На телефоне солнце меньше и мягче — не нависает над контентом */
+  .sun-moon { width: 96px; height: 96px; box-shadow: 0 0 64px 18px rgba(255, 220, 130, 0.42); }
+  .advantages { margin-top: 28px; }
+  .adv-grid { grid-template-columns: 1fr; gap: 12px; }
+  .adv-card { padding: 16px 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   .foot { justify-content: center; text-align: center; gap: 10px; }
   .refresh { margin-left: 0; width: 100%; padding: 14px; font-size: 15px; }
 }

@@ -1,6 +1,6 @@
 /* Service worker — офлайн-кэш и быстрый запуск как приложение.
    Меняй версию CACHE при обновлении файлов, чтобы кэш сбросился. */
-const CACHE = "pogoda-v3";
+const CACHE = "pogoda-v4";
 
 // «Оболочка» приложения — кэшируем при установке
 const SHELL = [
@@ -49,17 +49,18 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Свои файлы — сначала кэш, иначе сеть (и докэшируем шрифты/прочее)
+  // Свои файлы — stale-while-revalidate: мгновенно отдаём из кэша (быстрый старт, без мигания),
+  // а в фоне тихо обновляем кэш. Так новая вёрстка/скрипты приезжают сами к следующему запуску.
   e.respondWith(
     caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
+      const network = fetch(req).then((res) => {
         if (res.ok && (url.origin === location.origin || url.hostname.includes("gstatic"))) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return res;
       }).catch(() => cached);
+      return cached || network;
     })
   );
 });

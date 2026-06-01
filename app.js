@@ -207,20 +207,6 @@ async function fetchWeather(city) {
   return res.json();
 }
 
-// ====== Дополнительный источник: OpenWeatherMap для кросс-проверки ======
-async function fetchOpenWeather(city) {
-  try {
-    // Используем бесплатный API OpenWeatherMap (без ключа - через прокси)
-    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${city.lat}&lon=${city.lon}&units=metric&lang=ru`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return res.json();
-  } catch (e) {
-    console.warn("OpenWeather недоступен:", e);
-    return null;
-  }
-}
-
 // ====== Анализ осадков: когда начнётся / закончится и окна на сутки ======
 
 // Нау-каст по 15-минутным данным — точное время старта/окончания в ближайшие 2 часа
@@ -516,6 +502,48 @@ function renderError(city) {
   return art;
 }
 
+// ====== Скелетон-карточка: держит место и шиммерит, пока грузятся данные ======
+// Главное против «мигания»: на старте экран сразу выглядит как приложение,
+// реклама не подпрыгивает под шапку и нет резкого скачка вёрстки при загрузке.
+function skeletonCard(city) {
+  const art = document.createElement("article");
+  art.className = "card skeleton";
+  const reps = (n, html) => Array.from({ length: n }, () => html).join("");
+  art.innerHTML = `
+    <div class="card-head">
+      <div class="city">
+        <span class="sk sk-text" style="width:46%"></span>
+        <span class="sk sk-text" style="width:62%;margin-top:9px"></span>
+      </div>
+      <span class="sk sk-circle"></span>
+    </div>
+    <div class="now">
+      <span class="sk sk-temp"></span>
+      <div class="now-meta">
+        <span class="sk sk-text" style="width:70%"></span>
+        <span class="sk sk-text" style="width:55%"></span>
+        <span class="sk sk-text" style="width:40%"></span>
+      </div>
+    </div>
+    <div class="sk sk-bar" style="height:66px;margin-bottom:20px"></div>
+    <div class="details">${reps(6, '<span class="sk sk-detail"></span>')}</div>
+    <div class="section-title"><span class="sk sk-text" style="width:130px"></span></div>
+    <div class="hourly sk-row">${reps(8, '<span class="sk sk-hour"></span>')}</div>
+    <div class="section-title"><span class="sk sk-text" style="width:90px"></span></div>
+    <div class="daily">${reps(7, '<span class="sk sk-day"></span>')}</div>`;
+  if (city) art.querySelector(".city .sk-text").setAttribute("aria-label", city.name);
+  return art;
+}
+
+// Мгновенно показываем заглушки под все города (синхронно, до первого fetch)
+function showSkeletons() {
+  const cards = document.getElementById("cards");
+  if (!cards || cards.children.length) return;
+  const frag = document.createDocumentFragment();
+  CITIES.forEach((c) => frag.appendChild(skeletonCard(c)));
+  cards.appendChild(frag);
+}
+
 // ====== Тема фона по погоде и времени суток ======
 const THEMES = {
   clearDay:   ["#2b6cd4", "#5fa8e8"],
@@ -551,6 +579,11 @@ function applyBackground(code, isDay) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", top);
   spawnParticles(code);
+  // Солнце/луну показываем плавно только ПОСЛЕ того, как фон выставлен под погоду,
+  // — иначе при запуске большое солнце вспыхивало на секунду (см. фикс мигания).
+  if (!document.body.classList.contains("ready")) {
+    requestAnimationFrame(() => document.body.classList.add("ready"));
+  }
 }
 
 // ====== Частицы: дождь / снег ======
@@ -602,22 +635,27 @@ async function update() {
 
   const results = await Promise.allSettled(CITIES.map(fetchWeather));
   const cards = document.getElementById("cards");
-  cards.innerHTML = "";
-  // Анимация «выезда» карточек — только при первой загрузке, без мигания на автообновлении
-  if (firstRender) { cards.classList.add("intro"); firstRender = false; }
-  else cards.classList.remove("intro");
 
+  // Собираем все карточки в фрагмент и подменяем за один раз (replaceChildren),
+  // без промежуточного пустого кадра — это убирает мигание при загрузке и автообновлении.
+  const frag = document.createDocumentFragment();
   let firstCity = null;
   results.forEach((r, i) => {
     if (r.status === "fulfilled") {
       const { node, isDay, code } = renderCard(CITIES[i], r.value);
-      cards.appendChild(node);
+      frag.appendChild(node);
       if (i === 0) firstCity = { isDay, code }; // фон по первому городу (Сосновый Бор)
     } else {
-      cards.appendChild(renderError(CITIES[i]));
+      frag.appendChild(renderError(CITIES[i]));
       console.error("Ошибка загрузки", CITIES[i].name, r.reason);
     }
   });
+
+  // Анимация «выезда» карточек — только при первой загрузке, без мигания на автообновлении.
+  // Класс ставим ДО вставки (rise использует fill-mode both), чтобы не было вспышки.
+  cards.classList.toggle("intro", firstRender);
+  cards.replaceChildren(frag);
+  firstRender = false;
 
   if (firstCity) applyBackground(firstCity.code, firstCity.isDay);
   const anyOk = results.some((r) => r.status === "fulfilled");
@@ -726,6 +764,16 @@ function initInstall() {
 }
 
 if ("serviceWorker" in navigator) {
+  // Если уже есть управляющий SW, то его смена = приехало обновление → один тихий reload.
+  // На самой первой установке controller отсутствует, поэтому лишней перезагрузки не будет.
+  if (navigator.serviceWorker.controller) {
+    let swReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (swReloaded) return;
+      swReloaded = true;
+      location.reload();
+    });
+  }
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch((err) =>
       console.warn("SW не зарегистрирован:", err)
@@ -743,6 +791,7 @@ initInstall();
 tickClock();
 setInterval(tickClock, 1000);
 
+showSkeletons();   // мгновенные заглушки, пока летит первый запрос — никакого пустого экрана
 update();
 setInterval(update, REFRESH_MS);
 

@@ -207,6 +207,157 @@ async function fetchWeather(city) {
   return res.json();
 }
 
+// ====== #1 ECMWF: отдельный прогноз Европейского центра для усреднения ======
+// Базовая модель (best_match) даёт вероятности/нау-каст/UV, а ECMWF используем,
+// чтобы усреднить температуру — два независимых источника устойчивее одного.
+async function fetchEcmwf(city) {
+  try {
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.search = new URLSearchParams({
+      latitude: city.lat,
+      longitude: city.lon,
+      timezone: city.tz,
+      current: "temperature_2m",
+      hourly: "temperature_2m",
+      daily: "temperature_2m_max,temperature_2m_min",
+      forecast_days: "14",
+      models: "ecmwf_ifs025",
+      cell_selection: "nearest",
+      _: Date.now(),
+    }).toString();
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
+    console.warn("ECMWF недоступен:", e);
+    return null;
+  }
+}
+
+const avg2 = (a, b) => (a == null ? b : (b == null ? a : (a + b) / 2));
+
+// Усредняем ряд температур по совпадающим меткам времени (массивы моделей могут не совпадать 1:1)
+function blendSeries(baseTimes, baseArr, exTimes, exArr) {
+  if (!baseArr || !exArr || !exTimes) return baseArr;
+  const idx = new Map(exTimes.map((t, i) => [t, i]));
+  return baseArr.map((v, i) => {
+    const j = idx.get(baseTimes[i]);
+    return j != null ? avg2(v, exArr[j]) : v;
+  });
+}
+
+// Вмешиваем ECMWF в температуру базовых данных (current/hourly/daily), не трогая остальное
+function blendEcmwf(bm, ec) {
+  if (!ec) return bm;
+  if (bm.current && ec.current && ec.current.temperature_2m != null) {
+    bm.current.temperature_2m = avg2(bm.current.temperature_2m, ec.current.temperature_2m);
+  }
+  if (bm.hourly && ec.hourly) {
+    bm.hourly.temperature_2m = blendSeries(
+      bm.hourly.time, bm.hourly.temperature_2m, ec.hourly.time, ec.hourly.temperature_2m);
+  }
+  if (bm.daily && ec.daily) {
+    bm.daily.temperature_2m_max = blendSeries(
+      bm.daily.time, bm.daily.temperature_2m_max, ec.daily.time, ec.daily.temperature_2m_max);
+    bm.daily.temperature_2m_min = blendSeries(
+      bm.daily.time, bm.daily.temperature_2m_min, ec.daily.time, ec.daily.temperature_2m_min);
+  }
+  return bm;
+}
+
+// ====== #3 Радарный нау-каст (RainViewer): фактические осадки по карте ======
+// Карта радара одна на оба города — берём метаданные один раз за обновление.
+async function fetchRadarMeta() {
+  try {
+    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
+    console.warn("RainViewer недоступен:", e);
+    return null;
+  }
+}
+
+// lon/lat → номер тайла и пиксель внутри него (Web Mercator, как в slippy-картах)
+function lonLatToTilePixel(lon, lat, z, tile) {
+  const n = Math.pow(2, z);
+  const xf = (lon + 180) / 360 * n;
+  const latRad = lat * Math.PI / 180;
+  const yf = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+  const xtile = Math.floor(xf), ytile = Math.floor(yf);
+  return {
+    xtile, ytile,
+    px: Math.min(tile - 1, Math.floor((xf - xtile) * tile)),
+    py: Math.min(tile - 1, Math.floor((yf - ytile) * tile)),
+  };
+}
+
+// Читаем альфу одного пикселя радарного тайла. -1 = не удалось (CORS/нет тайла) → радар считаем недоступным.
+function samplePixel(url, px, py) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const cv = document.createElement("canvas");
+        cv.width = img.width; cv.height = img.height;
+        const ctx = cv.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        resolve(ctx.getImageData(px, py, 1, 1).data[3]);
+      } catch (e) {
+        resolve(-1); // канвас «затаинтился» из-за CORS — пиксель не прочитать
+      }
+    };
+    img.onerror = () => resolve(-1);
+    img.src = url;
+  });
+}
+
+// Анализ кадров радара: что сейчас и когда начнётся/кончится в ближайший час.
+// Если радар «чист» — НЕ утверждаем «сухо» (могло просто не быть покрытия), отдаём прогноз модели.
+function analyzeRadar(samples) {
+  const WET = 20; // порог альфы: ниже — фон/слабый шум
+  const now = Date.now();
+  let nowIdx = 0;
+  samples.forEach((s, i) => { if (s.time <= now) nowIdx = i; });
+  const wet = (s) => s.a >= WET;
+
+  if (wet(samples[nowIdx])) {
+    for (let j = nowIdx + 1; j < samples.length; j++) {
+      if (!wet(samples[j])) return { kind: "stop", time: samples[j].time };
+    }
+    return { kind: "ongoing" };
+  }
+  for (let j = nowIdx + 1; j < samples.length; j++) {
+    if (wet(samples[j])) return { kind: "start", time: samples[j].time };
+  }
+  return null; // по радару осадков нет — пусть решает модель
+}
+
+async function radarNowcastFor(city, meta) {
+  if (!meta || !meta.radar || !meta.host) return null;
+  // Последние кадры факта (≈30 мин) + прогнозные кадры, если RainViewer их отдаёт.
+  // Прогноз сейчас может быть пуст — тогда работаем по факту: «идут ли осадки прямо сейчас».
+  const frames = [...(meta.radar.past || []).slice(-3), ...(meta.radar.nowcast || [])];
+  if (!frames.length) return null;
+
+  const z = 7; // зум: ~0.6 км/пиксель на широте СПб — точно по точке города
+  const { xtile, ytile, px, py } = lonLatToTilePixel(city.lon, city.lat, z, 256);
+
+  const samples = await Promise.all(frames.map((f) =>
+    samplePixel(`${meta.host}${f.path}/256/${z}/${xtile}/${ytile}/2/1_1.png`, px, py)
+      .then((a) => ({ time: f.time * 1000, a }))
+  ));
+  // хоть один кадр не прочитался (CORS/нет тайла) → радар ненадёжен, не используем
+  if (samples.some((s) => s.a < 0)) return null;
+  return analyzeRadar(samples);
+}
+
+// Тип осадков, когда его подсказывает только радар (без кода погоды): по температуре
+function guessPrecipType(cur) {
+  return (cur && cur.temperature_2m != null && cur.temperature_2m <= 1) ? "снег" : "дождь";
+}
+
 // ====== Анализ осадков: когда начнётся / закончится и окна на сутки ======
 
 // Нау-каст по 15-минутным данным — точное время старта/окончания в ближайшие 2 часа
@@ -302,12 +453,30 @@ function dayPrecipParts(data, dateStr, minHour = -1) {
   return { parts, maxProb };
 }
 
-// Собираем готовый блок: главная строка (нау-каст) + окна на сутки
-function buildPrecip(data, cur, tz) {
-  const nc = nowcast(data);
+// Собираем готовый блок: главная строка (нау-каст) + окна на сутки.
+// radar — результат radarNowcastFor (может быть null); если радар видит осадки, он главнее модели.
+function buildPrecip(data, cur, tz, radar) {
   const wins = precipWindows(data, cur);
   let headline, headClass = "dry";
 
+  // Радар отдаёт только факт «мокро/сухо» без типа — тип берём по температуре
+  if (radar && radar.kind) {
+    const t = cap(guessPrecipType(cur));
+    if (radar.kind === "start") {
+      headline = `${t} начнётся около ${fmtTime(radar.time, tz)} (по радару)`;
+      headClass = "soon";
+    } else if (radar.kind === "ongoing") {
+      headline = `Сейчас идут осадки (по радару)`;
+      headClass = "now";
+    } else if (radar.kind === "stop") {
+      headline = `Осадки закончатся около ${fmtTime(radar.time, tz)} (по радару)`;
+      headClass = "now";
+    }
+    return { headline, headClass, lines: wins.map(fmtWindow) };
+  }
+
+  // Радара нет (или чисто) — обычный модельный нау-каст
+  const nc = nowcast(data);
   if (nc && nc.kind === "start") {
     headline = `${cap(precipType(nc.code))} начнётся около ${fmtTime(nc.time, tz)}`;
     headClass = "soon";
@@ -331,7 +500,7 @@ function buildPrecip(data, cur, tz) {
 }
 
 // ====== Рендер одной карточки ======
-function renderCard(city, data) {
+function renderCard(city, data, radar) {
   const tpl = document.getElementById("cardTemplate");
   const node = tpl.content.cloneNode(true);
   const cur = data.current;
@@ -369,7 +538,7 @@ function renderCard(city, data) {
   node.querySelector(".sunset").textContent = fmtTime(data.daily.sunset[0], city.tz);
 
   // ----- Блок «Когда ждать осадки» -----
-  const precip = buildPrecip(data, cur, city.tz);
+  const precip = buildPrecip(data, cur, city.tz, radar);
   const pb = node.querySelector(".precip-block");
   pb.classList.add("p-" + precip.headClass);
   pb.querySelector(".precip-headline").textContent = precip.headline;
@@ -633,7 +802,22 @@ async function update() {
   const btn = document.getElementById("refreshBtn");
   btn.classList.add("spin");
 
-  const results = await Promise.allSettled(CITIES.map(fetchWeather));
+  // Метаданные радара — одни на оба города, тянем один раз (не критично, может быть null)
+  const radarMeta = await fetchRadarMeta().catch(() => null);
+
+  // Для каждого города параллельно: базовая модель + ECMWF + радар.
+  // Критична только базовая модель; ECMWF и радар — необязательные улучшения.
+  const results = await Promise.allSettled(CITIES.map(async (city) => {
+    const [bm, ec, radar] = await Promise.allSettled([
+      fetchWeather(city),
+      fetchEcmwf(city),
+      radarNowcastFor(city, radarMeta),
+    ]);
+    if (bm.status !== "fulfilled") throw bm.reason; // нет базовых данных — карточка-ошибка
+    const data = blendEcmwf(bm.value, ec.status === "fulfilled" ? ec.value : null);
+    return { data, radar: radar.status === "fulfilled" ? radar.value : null };
+  }));
+
   const cards = document.getElementById("cards");
 
   // Собираем все карточки в фрагмент и подменяем за один раз (replaceChildren),
@@ -642,7 +826,7 @@ async function update() {
   let firstCity = null;
   results.forEach((r, i) => {
     if (r.status === "fulfilled") {
-      const { node, isDay, code } = renderCard(CITIES[i], r.value);
+      const { node, isDay, code } = renderCard(CITIES[i], r.value.data, r.value.radar);
       frag.appendChild(node);
       if (i === 0) firstCity = { isDay, code }; // фон по первому городу (Сосновый Бор)
     } else {

@@ -1,6 +1,6 @@
 /* Service worker — офлайн-кэш и быстрый запуск как приложение.
    Меняй версию CACHE при обновлении файлов, чтобы кэш сбросился. */
-const CACHE = "pogoda-v4";
+const CACHE = "pogoda-v5";
 
 // «Оболочка» приложения — кэшируем при установке
 const SHELL = [
@@ -34,6 +34,9 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+
+  // Радар (RainViewer) — пропускаем мимо SW: тайлы должны остаться CORS-читаемыми для canvas
+  if (url.hostname.endsWith("rainviewer.com")) return;
 
   // Данные погоды (Open-Meteo) — сначала сеть, при оффлайне отдаём последний ответ
   if (url.hostname.endsWith("open-meteo.com")) {

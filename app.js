@@ -2,6 +2,7 @@
 const CITIES = [
   { id: "sosnovy", name: "Сосновый Бор", lat: 59.8911, lon: 29.0786, tz: "Europe/Moscow" },
   { id: "spb", name: "Санкт-Петербург", lat: 59.9386, lon: 30.3141, tz: "Europe/Moscow" },
+  { id: "sochi", name: "Сочи", lat: 43.6028, lon: 39.7342, tz: "Europe/Moscow" },
 ];
 
 const REFRESH_MS = 3 * 60 * 1000; // автообновление каждые 3 минуты (чаще чем у Яндекса)
@@ -449,6 +450,113 @@ function buildPrecip(data, cur, tz, radar) {
   return { headline, headClass, lines };
 }
 
+// ====== Спарклайн температуры на 24 часа ======
+// Плавная SVG-кривая температуры: заливка-градиент, метки min/max и точка «сейчас».
+// Цвет линии завязан на саму температуру (тёплый верх → холодный низ),
+// плюс мягкая подсветка ночных часов по is_day. Логику данных не трогаем —
+// берём те же почасовые значения, что и в почасовом прогнозе ниже.
+function buildSparkline(data, tz, startIdx, cityId) {
+  const H = data.hourly;
+  if (!H || !H.time || !H.temperature_2m) return "";
+  const n = Math.min(24, H.time.length - startIdx);
+  if (n < 2) return "";
+
+  const temps = [], times = [], days = [];
+  for (let k = 0; k < n; k++) {
+    const i = startIdx + k;
+    temps.push(H.temperature_2m[i]);
+    times.push(H.time[i]);
+    days.push(H.is_day ? H.is_day[i] : 1);
+  }
+
+  // Координатная сетка viewBox (тянется по ширине карточки, пропорции сохраняются)
+  const W = 720, VH = 158;
+  const padX = 26, padTop = 30, padBot = 30;
+  const innerW = W - padX * 2;
+  const innerH = VH - padTop - padBot;
+  const baseY = padTop + innerH;
+
+  let tMin = Math.min(...temps), tMax = Math.max(...temps);
+  if (tMax - tMin < 1) { tMax += 0.5; tMin -= 0.5; } // не вырождаем плоскую кривую
+  const span = tMax - tMin;
+
+  const xAt = (k) => padX + (innerW * k) / (n - 1);
+  const yAt = (t) => padTop + innerH * (1 - (t - tMin) / span);
+  const pts = temps.map((t, k) => [xAt(k), yAt(t)]);
+
+  // Гладкая кривая: Catmull-Rom → кубические безье
+  let line = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    line += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  const area = `${line} L ${pts[n - 1][0].toFixed(1)} ${baseY.toFixed(1)} L ${pts[0][0].toFixed(1)} ${baseY.toFixed(1)} Z`;
+
+  // Экстремумы
+  let iMin = 0, iMax = 0;
+  temps.forEach((t, k) => { if (t < temps[iMin]) iMin = k; if (t > temps[iMax]) iMax = k; });
+
+  // Мягкая подсветка ночных интервалов (объединяем подряд идущие ночные часы)
+  let bands = "", runStart = null;
+  for (let k = 0; k <= n; k++) {
+    const isNight = k < n && days[k] === 0;
+    if (isNight && runStart === null) runStart = k;
+    if (!isNight && runStart !== null) {
+      const x0 = xAt(Math.max(0, runStart - 0.5));
+      const x1 = xAt(Math.min(n - 1, k - 1 + 0.5));
+      bands += `<rect class="sp-night" x="${x0.toFixed(1)}" y="${(padTop - 8).toFixed(1)}" width="${(x1 - x0).toFixed(1)}" height="${(innerH + 8).toFixed(1)}"/>`;
+      runStart = null;
+    }
+  }
+
+  // Подписи часов (каждые 6 часов)
+  let ticks = "";
+  for (let k = 0; k < n; k += 6) {
+    const anchor = k === 0 ? "start" : (k >= n - 1 ? "end" : "middle");
+    ticks += `<text class="sp-tick" x="${xAt(k).toFixed(1)}" y="${VH - 8}" text-anchor="${anchor}">${fmtTime(times[k], tz)}</text>`;
+  }
+
+  // Маркер экстремума с подписью температуры
+  const mark = (k, cls, above) => {
+    const px = xAt(k), py = yAt(temps[k]);
+    let anchor = "middle", lx = px;
+    if (px < padX + 16) { anchor = "start"; lx = px - 3; }
+    else if (px > W - padX - 16) { anchor = "end"; lx = px + 3; }
+    const ly = above ? py - 11 : py + 19;
+    return `<line class="sp-stem" x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="${baseY.toFixed(1)}"/>
+      <circle class="sp-dot ${cls}" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3.4"/>
+      <text class="sp-lab ${cls}" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}">${Math.round(temps[k])}°</text>`;
+  };
+
+  const gStroke = `spk-stroke-${cityId}`;
+  const gArea = `spk-area-${cityId}`;
+  const now = `<circle class="sp-now-halo" cx="${pts[0][0].toFixed(1)}" cy="${pts[0][1].toFixed(1)}" r="6"/>
+    <circle class="sp-now" cx="${pts[0][0].toFixed(1)}" cy="${pts[0][1].toFixed(1)}" r="3.6"/>`;
+
+  return `<svg class="spark-svg" viewBox="0 0 ${W} ${VH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="График температуры на ближайшие 24 часа">
+    <defs>
+      <linearGradient id="${gStroke}" gradientUnits="userSpaceOnUse" x1="0" y1="${padTop}" x2="0" y2="${baseY}">
+        <stop offset="0%" stop-color="#ff8d6b"/>
+        <stop offset="48%" stop-color="#ffd166"/>
+        <stop offset="100%" stop-color="#6bd6ff"/>
+      </linearGradient>
+      <linearGradient id="${gArea}" gradientUnits="userSpaceOnUse" x1="0" y1="${padTop}" x2="0" y2="${baseY}">
+        <stop offset="0%" stop-color="rgba(124,196,255,.40)"/>
+        <stop offset="100%" stop-color="rgba(124,196,255,0)"/>
+      </linearGradient>
+    </defs>
+    ${bands}
+    <path class="sp-area" d="${area}" fill="url(#${gArea})"/>
+    <path class="sp-line" d="${line}" fill="none" stroke="url(#${gStroke})"/>
+    ${ticks}
+    ${mark(iMax, "sp-max", true)}
+    ${mark(iMin, "sp-min", false)}
+    ${now}
+  </svg>`;
+}
+
 // ====== Рендер одной карточки ======
 function renderCard(city, data, radar) {
   const tpl = document.getElementById("cardTemplate");
@@ -540,6 +648,10 @@ function renderCard(city, data, radar) {
     fragment.appendChild(h);
   }
   hourly.appendChild(fragment);
+
+  // ----- Спарклайн: плавная кривая температуры на те же 24 часа -----
+  const spark = node.querySelector(".spark");
+  if (spark) spark.innerHTML = buildSparkline(data, city.tz, startIdx, city.id);
 
   // ----- Прогноз на 14 дней (вместо 7): КОГДА именно ждать осадки (утром/днём/вечером) -----
   const daily = node.querySelector(".daily");
@@ -646,6 +758,8 @@ function skeletonCard(city) {
     </div>
     <div class="sk sk-bar" style="height:66px;margin-bottom:20px"></div>
     <div class="details">${reps(6, '<span class="sk sk-detail"></span>')}</div>
+    <div class="section-title"><span class="sk sk-text" style="width:160px"></span></div>
+    <div class="sk sk-spark"></div>
     <div class="section-title"><span class="sk sk-text" style="width:130px"></span></div>
     <div class="hourly sk-row">${reps(8, '<span class="sk sk-hour"></span>')}</div>
     <div class="section-title"><span class="sk sk-text" style="width:90px"></span></div>

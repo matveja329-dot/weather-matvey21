@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Погода · Сосновый Бор и Санкт-Петербург</title>
+  <title>Погода · Сосновый Бор, Санкт-Петербург и Сочи</title>
 
   <!-- PWA: установка как приложение на Android / iOS -->
   <meta name="theme-color" content="#1a2a52" />
@@ -19,7 +19,16 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Шрифт грузим НЕблокирующе: если Google Fonts недоступны (VPN/файрвол/медленный
+       канал), страница всё равно сразу отрисуется системным шрифтом, а Manrope
+       подхватится позже, когда (и если) загрузится. Сайт больше не «висит» на шрифте. -->
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap"
+        media="print" onload="this.media='all'" />
+  <noscript>
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" />
+  </noscript>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -34,7 +43,7 @@
       <span class="logo">☁</span>
       <div>
         <h1>Погода</h1>
-        <p class="subtitle">Сосновый Бор · Санкт-Петербург</p>
+        <p class="subtitle">Сосновый Бор · Санкт-Петербург · Сочи</p>
       </div>
     </div>
     <div class="status">
@@ -151,6 +160,9 @@
         <div class="detail"><span class="d-label">Восход</span><span class="d-val sunrise"></span></div>
         <div class="detail"><span class="d-label">Закат</span><span class="d-val sunset"></span></div>
       </div>
+
+      <div class="section-title">Температура · ближайшие 24 ч</div>
+      <div class="spark"></div>
 
       <div class="section-title">Почасовой прогноз</div>
       <div class="hourly"></div>

@@ -347,6 +347,7 @@ body.is-night .sun-moon {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .day .d-when.on { color: var(--accent); font-weight: 600; }
+.day .d-prec { display: none; }   /* компактная пометка осадков — только в мобильной плитке */
 .day .d-temps { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .day .dt-min { color: var(--muted); min-width: 26px; text-align: right; }
 .day .dt-max { min-width: 26px; text-align: right; font-weight: 600; }
@@ -412,6 +413,23 @@ body.is-night .sun-moon {
 .refresh.spin { animation: spin .8s linear; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Кнопка установки приложения (PWA). Появляется, только если установка доступна
+   и сайт ещё не открыт как установленное приложение — логика в app.js. */
+.install {
+  margin-left: auto; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  padding: 9px 16px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(45,156,219,.30), rgba(124,196,255,.20));
+  border: 1px solid rgba(124,196,255,.45);
+  transition: transform .15s ease, background .2s ease, box-shadow .2s ease;
+}
+.install:hover {
+  background: linear-gradient(135deg, rgba(45,156,219,.45), rgba(124,196,255,.32));
+  transform: translateY(-1px); box-shadow: 0 6px 18px rgba(45,156,219,.4);
+}
+.install:active { transform: scale(.96); }
+.install[hidden] { display: none; }
+
 .card.error { text-align: center; padding: 40px 26px; }
 .card.error .err-icon { font-size: 40px; margin-bottom: 12px; }
 
@@ -437,6 +455,34 @@ body.is-night .sun-moon {
   .adv-card { padding: 16px 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   .foot { justify-content: center; text-align: center; gap: 10px; }
   .refresh { margin-left: 0; width: 100%; padding: 14px; font-size: 15px; }
+  .install { margin-left: 0; width: 100%; padding: 14px; font-size: 15px; text-align: center; }
+
+  /* 14-дневный прогноз на телефоне — горизонтальная лента: дни листаются
+     вправо/влево, страница больше не растягивается длинным вертикальным списком */
+  .daily {
+    flex-direction: row; gap: 8px; overflow-x: auto; overflow-y: hidden;
+    padding-bottom: 8px; margin: 0 -2px;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    touch-action: pan-x; overscroll-behavior-x: contain;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .daily::-webkit-scrollbar { height: 6px; }
+  .daily::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+  .day {
+    flex: 0 0 78px; display: flex; flex-direction: column; align-items: center;
+    gap: 6px; padding: 12px 8px 14px; text-align: center; scroll-snap-align: start;
+  }
+  .day:hover { transform: none; }   /* на тач-плитке боковой сдвиг не нужен */
+  .day .d-ico, .day .d-ico svg { width: 36px; height: 36px; }
+  .day .d-info { align-items: center; gap: 4px; width: 100%; }
+  .day .d-name { font-size: 12px; line-height: 1.1; white-space: nowrap; }
+  .day .d-when { display: none; }   /* подробный текст прячем — он есть в верхнем блоке и в подсказке */
+  .day .d-prec { display: block; font-size: 11px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+  .day .d-prec:empty { display: none; }
+  .day .d-temps { flex-direction: column; gap: 1px; }
+  .day .dt-max { order: -1; font-size: 17px; font-weight: 700; min-width: 0; text-align: center; }
+  .day .dt-min { font-size: 13px; min-width: 0; text-align: center; }
+  .day .bar { display: none; }
 }
 @media (max-width: 380px) {
   .temp { letter-spacing: -2px; }

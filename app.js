@@ -6,6 +6,7 @@ const CITIES = [
 ];
 
 const REFRESH_MS = 3 * 60 * 1000; // автообновление каждые 3 минуты (чаще чем у Яндекса)
+const RETRY_MS = 25 * 1000;       // если город не загрузился (сеть/VPN моргнули) — быстрый повтор, не ждём полные 3 минуты
 
 // ====== Коды погоды WMO: описание + ключ иконки ======
 const WMO = {
@@ -691,6 +692,11 @@ function renderCard(city, data, radar) {
       whenHtml = `<span class="d-when">${weatherDesc}${windInfo}</span>`;
     }
 
+    // Компактная пометка осадков для мобильной «плитки» дня (подробный текст там скрыт).
+    let precMini = "";
+    if (dp.parts.length) precMini = dp.maxProb ? `💧 ${dp.maxProb}%` : "💧";
+    else if (pr != null && pr >= 25) precMini = `${pr}%`;
+
     const row = document.createElement("div");
     row.className = "day";
 
@@ -706,6 +712,7 @@ function renderCard(city, data, radar) {
       <span class="d-info">
         <span class="d-name">${label}</span>
         ${whenHtml}
+        <span class="d-prec">${precMini}</span>
       </span>
       <span class="d-temps">
         <span class="dt-min">${Math.round(data.daily.temperature_2m_min[i])}°</span>
@@ -907,6 +914,15 @@ async function update() {
   setUpdated(new Date(), !anyOk);
   lastUpdate = Date.now();
 
+  // Быстрый авто-ретрай, если хоть один город не загрузился — не ждём весь интервал.
+  // Таймер один (не накапливаем), и снимаем его, как только всё загрузилось.
+  const anyFail = results.some((r) => r.status !== "fulfilled");
+  if (anyFail) {
+    if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; update(); }, RETRY_MS);
+  } else if (retryTimer) {
+    clearTimeout(retryTimer); retryTimer = null;
+  }
+
   setTimeout(() => btn.classList.remove("spin"), 800);
 }
 
@@ -1029,6 +1045,7 @@ if ("serviceWorker" in navigator) {
 // ====== Инициализация ======
 let lastUpdate = Date.now();
 let firstRender = true; // анимация появления карточек только при первой загрузке
+let retryTimer = null;  // таймер быстрого повтора при ошибке загрузки
 
 document.getElementById("refreshBtn").addEventListener("click", update);
 initInstall();

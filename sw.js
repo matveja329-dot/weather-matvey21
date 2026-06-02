@@ -1,6 +1,16 @@
 /* Service worker — офлайн-кэш и быстрый запуск как приложение.
    Меняй версию CACHE при обновлении файлов, чтобы кэш сбросился. */
-const CACHE = "pogoda-v7";
+const CACHE = "pogoda-v8";
+
+// Ключ кэша для Open-Meteo без cache-buster `_`: в app.js к каждому запросу
+// добавляется `_: Date.now()`, из-за чего URL всегда уникальный. Без нормализации
+// офлайн-фолбэк (caches.match) никогда не находил прошлый ответ, а кэш рос без предела.
+// Координаты/параметры в ключе остаются — значит на каждый город ровно одна запись.
+function omKey(rawUrl) {
+  const u = new URL(rawUrl);
+  u.searchParams.delete("_");
+  return u.toString();
+}
 
 // «Оболочка» приложения — кэшируем при установке
 const SHELL = [
@@ -38,16 +48,18 @@ self.addEventListener("fetch", (e) => {
   // Радар (RainViewer) — пропускаем мимо SW: тайлы должны остаться CORS-читаемыми для canvas
   if (url.hostname.endsWith("rainviewer.com")) return;
 
-  // Данные погоды (Open-Meteo) — сначала сеть, при оффлайне отдаём последний ответ
+  // Данные погоды (Open-Meteo) — сначала сеть, при оффлайне отдаём последний ответ.
+  // Кладём/ищем по ключу без `_`, иначе оффлайн-фолбэк не сработает (см. omKey).
   if (url.hostname.endsWith("open-meteo.com")) {
+    const key = omKey(req.url);
     e.respondWith(
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          caches.open(CACHE).then((c) => c.put(key, copy));
           return res;
         })
-        .catch(() => caches.match(req))
+        .catch(() => caches.match(key))
     );
     return;
   }

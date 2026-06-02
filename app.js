@@ -48,7 +48,7 @@ const C = {
 };
 
 // Лучи солнца — переиспользуем в нескольких иконках
-const SUN_RAYS = `<g fill="none" stroke="${C.sunStroke}" stroke-width="3" stroke-linecap="round">
+const SUN_RAYS = `<g class="wx-rays" fill="none" stroke="${C.sunStroke}" stroke-width="3" stroke-linecap="round">
     <line x1="32" y1="6" x2="32" y2="14"/><line x1="32" y1="50" x2="32" y2="58"/>
     <line x1="6" y1="32" x2="14" y2="32"/><line x1="50" y1="32" x2="58" y2="32"/>
     <line x1="13" y1="13" x2="19" y2="19"/><line x1="45" y1="45" x2="51" y2="51"/>
@@ -56,69 +56,69 @@ const SUN_RAYS = `<g fill="none" stroke="${C.sunStroke}" stroke-width="3" stroke
 
 const ICONS = {
   // Ясно — солнце
-  sun: `<svg viewBox="0 0 64 64">${SUN_RAYS}<circle cx="32" cy="32" r="12" fill="${C.sun}"/></svg>`,
+  sun: `<svg viewBox="0 0 64 64">${SUN_RAYS}<circle class="wx-sun" cx="32" cy="32" r="12" fill="${C.sun}"/></svg>`,
 
   // Ясно ночью — луна
   moon: `<svg viewBox="0 0 64 64">
-    <path d="M40 10a22 22 0 1 0 14 38 17 17 0 0 1-14-38z" fill="${C.moon}"/>
+    <path class="wx-moon" d="M40 10a22 22 0 1 0 14 38 17 17 0 0 1-14-38z" fill="${C.moon}"/>
     <circle cx="45" cy="20" r="2.2" fill="${C.moonShade}"/>
     <circle cx="52" cy="29" r="1.5" fill="${C.moonShade}"/>
     <circle cx="44" cy="31" r="1.2" fill="${C.moonShade}"/></svg>`,
 
   // Малооблачно — крупное солнце и небольшое облако
   few: `<svg viewBox="0 0 64 64">
-    <g transform="translate(-5 -6)">${SUN_RAYS}<circle cx="32" cy="32" r="11" fill="${C.sun}"/></g>
-    <path d="M27 52a8 8 0 0 1 7.7-9.8 9.6 9.6 0 0 1 18.1 3 6.4 6.4 0 0 1-.8 12.8H29a6.4 6.4 0 0 1-2-6z" fill="${C.cloud}"/></svg>`,
+    <g transform="translate(-5 -6)">${SUN_RAYS}<circle class="wx-sun" cx="32" cy="32" r="11" fill="${C.sun}"/></g>
+    <path class="wx-cloud" d="M27 52a8 8 0 0 1 7.7-9.8 9.6 9.6 0 0 1 18.1 3 6.4 6.4 0 0 1-.8 12.8H29a6.4 6.4 0 0 1-2-6z" fill="${C.cloud}"/></svg>`,
 
   // Малооблачно ночью — луна и небольшое облако
   fewNight: `<svg viewBox="0 0 64 64">
-    <path d="M28 8a15 15 0 1 0 9 25 12 12 0 0 1-9-25z" fill="${C.moon}"/>
-    <path d="M27 52a8 8 0 0 1 7.7-9.8 9.6 9.6 0 0 1 18.1 3 6.4 6.4 0 0 1-.8 12.8H29a6.4 6.4 0 0 1-2-6z" fill="${C.cloud}"/></svg>`,
+    <path class="wx-moon" d="M28 8a15 15 0 1 0 9 25 12 12 0 0 1-9-25z" fill="${C.moon}"/>
+    <path class="wx-cloud" d="M27 52a8 8 0 0 1 7.7-9.8 9.6 9.6 0 0 1 18.1 3 6.4 6.4 0 0 1-.8 12.8H29a6.4 6.4 0 0 1-2-6z" fill="${C.cloud}"/></svg>`,
 
   // Облачно с прояснениями — большое облако с солнцем сбоку
   partly: `<svg viewBox="0 0 64 64">
-    <circle cx="18" cy="18" r="8" fill="${C.sun}"/>
-    <g fill="none" stroke="${C.sunStroke}" stroke-width="2" stroke-linecap="round">
+    <circle class="wx-sun" cx="18" cy="18" r="8" fill="${C.sun}"/>
+    <g class="wx-rays" fill="none" stroke="${C.sunStroke}" stroke-width="2" stroke-linecap="round">
     <line x1="18" y1="4" x2="18" y2="9"/><line x1="4" y1="18" x2="9" y2="18"/>
     <line x1="8" y1="8" x2="11.5" y2="11.5"/><line x1="28" y1="8" x2="24.5" y2="11.5"/></g>
-    <path d="M16 48a11 11 0 0 1 10.8-13.5 13.5 13.5 0 0 1 25.5 4.5 9 9 0 0 1-1.3 18H18a9 9 0 0 1-2-9z" fill="${C.cloud}"/></svg>`,
+    <path class="wx-cloud" d="M16 48a11 11 0 0 1 10.8-13.5 13.5 13.5 0 0 1 25.5 4.5 9 9 0 0 1-1.3 18H18a9 9 0 0 1-2-9z" fill="${C.cloud}"/></svg>`,
 
   // Облачно с прояснениями ночью — луна за облаком
   partlyNight: `<svg viewBox="0 0 64 64">
-    <path d="M25 7a14 14 0 1 0 9 24 11 11 0 0 1-9-24z" fill="${C.moon}"/>
-    <path d="M20 46a10 10 0 0 1 9.8-12 12 12 0 0 1 23 3.5 8 8 0 0 1-1 16H22a8 8 0 0 1-2-7.5z" fill="${C.cloud}"/></svg>`,
+    <path class="wx-moon" d="M25 7a14 14 0 1 0 9 24 11 11 0 0 1-9-24z" fill="${C.moon}"/>
+    <path class="wx-cloud" d="M20 46a10 10 0 0 1 9.8-12 12 12 0 0 1 23 3.5 8 8 0 0 1-1 16H22a8 8 0 0 1-2-7.5z" fill="${C.cloud}"/></svg>`,
 
   cloud: `<svg viewBox="0 0 64 64">
-    <path d="M18 46a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 17H20a8.5 8.5 0 0 1-2-7.5z" fill="${C.cloud}"/></svg>`,
+    <path class="wx-cloud" d="M18 46a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 17H20a8.5 8.5 0 0 1-2-7.5z" fill="${C.cloud}"/></svg>`,
 
   fog: `<svg viewBox="0 0 64 64">
-    <path d="M18 38a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 13H20a8.5 8.5 0 0 1-2-3.5z" fill="${C.cloudDark}"/>
-    <g stroke="${C.cloud}" stroke-width="3" stroke-linecap="round">
+    <path class="wx-cloud" d="M18 38a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 13H20a8.5 8.5 0 0 1-2-3.5z" fill="${C.cloudDark}"/>
+    <g class="wx-fog" stroke="${C.cloud}" stroke-width="3" stroke-linecap="round">
     <line x1="14" y1="50" x2="50" y2="50"/><line x1="20" y1="57" x2="44" y2="57"/></g></svg>`,
 
   drizzle: `<svg viewBox="0 0 64 64">
-    <path d="M18 38a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
-    <g stroke="${C.rain}" stroke-width="3" stroke-linecap="round">
+    <path class="wx-cloud" d="M18 38a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-rain" stroke="${C.rain}" stroke-width="3" stroke-linecap="round">
     <line x1="26" y1="50" x2="24" y2="56"/><line x1="38" y1="50" x2="36" y2="56"/></g></svg>`,
 
   rain: `<svg viewBox="0 0 64 64">
-    <path d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
-    <g stroke="${C.rain}" stroke-width="3.2" stroke-linecap="round">
+    <path class="wx-cloud" d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-rain" stroke="${C.rain}" stroke-width="3.2" stroke-linecap="round">
     <line x1="24" y1="48" x2="21" y2="57"/><line x1="33" y1="48" x2="30" y2="57"/>
     <line x1="42" y1="48" x2="39" y2="57"/></g></svg>`,
 
   sleet: `<svg viewBox="0 0 64 64">
-    <path d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
-    <g stroke="${C.rain}" stroke-width="3" stroke-linecap="round"><line x1="25" y1="48" x2="22" y2="56"/><line x1="40" y1="48" x2="37" y2="56"/></g>
-    <circle cx="33" cy="53" r="2.4" fill="${C.snow}"/></svg>`,
+    <path class="wx-cloud" d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-rain" stroke="${C.rain}" stroke-width="3" stroke-linecap="round"><line x1="25" y1="48" x2="22" y2="56"/><line x1="40" y1="48" x2="37" y2="56"/></g>
+    <circle class="wx-snow" cx="33" cy="53" r="2.4" fill="${C.snow}"/></svg>`,
 
   snow: `<svg viewBox="0 0 64 64">
-    <path d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
-    <g fill="${C.snow}"><circle cx="25" cy="51" r="2.6"/><circle cx="33" cy="56" r="2.6"/><circle cx="41" cy="51" r="2.6"/></g></svg>`,
+    <path class="wx-cloud" d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-snow" fill="${C.snow}"><circle cx="25" cy="51" r="2.6"/><circle cx="33" cy="56" r="2.6"/><circle cx="41" cy="51" r="2.6"/></g></svg>`,
 
   storm: `<svg viewBox="0 0 64 64">
-    <path d="M18 34a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloudDark}"/>
-    <path d="M32 44l-8 11h7l-3 9 11-13h-7l4-7z" fill="${C.bolt}"/></svg>`,
+    <path class="wx-cloud" d="M18 34a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloudDark}"/>
+    <path class="wx-bolt" d="M32 44l-8 11h7l-3 9 11-13h-7l4-7z" fill="${C.bolt}"/></svg>`,
 };
 
 // Иконка по коду WMO; ночью солнце меняем на луну
@@ -207,63 +207,13 @@ async function fetchWeather(city) {
   return res.json();
 }
 
-// ====== #1 ECMWF: отдельный прогноз Европейского центра для усреднения ======
-// Базовая модель (best_match) даёт вероятности/нау-каст/UV, а ECMWF используем,
-// чтобы усреднить температуру — два независимых источника устойчивее одного.
-async function fetchEcmwf(city) {
-  try {
-    const url = new URL("https://api.open-meteo.com/v1/forecast");
-    url.search = new URLSearchParams({
-      latitude: city.lat,
-      longitude: city.lon,
-      timezone: city.tz,
-      current: "temperature_2m",
-      hourly: "temperature_2m",
-      daily: "temperature_2m_max,temperature_2m_min",
-      forecast_days: "14",
-      models: "ecmwf_ifs025",
-      cell_selection: "nearest",
-      _: Date.now(),
-    }).toString();
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return res.json();
-  } catch (e) {
-    console.warn("ECMWF недоступен:", e);
-    return null;
-  }
-}
-
-const avg2 = (a, b) => (a == null ? b : (b == null ? a : (a + b) / 2));
-
-// Усредняем ряд температур по совпадающим меткам времени (массивы моделей могут не совпадать 1:1)
-function blendSeries(baseTimes, baseArr, exTimes, exArr) {
-  if (!baseArr || !exArr || !exTimes) return baseArr;
-  const idx = new Map(exTimes.map((t, i) => [t, i]));
-  return baseArr.map((v, i) => {
-    const j = idx.get(baseTimes[i]);
-    return j != null ? avg2(v, exArr[j]) : v;
-  });
-}
-
-// Вмешиваем ECMWF в температуру базовых данных (current/hourly/daily), не трогая остальное
-function blendEcmwf(bm, ec) {
-  if (!ec) return bm;
-  if (bm.current && ec.current && ec.current.temperature_2m != null) {
-    bm.current.temperature_2m = avg2(bm.current.temperature_2m, ec.current.temperature_2m);
-  }
-  if (bm.hourly && ec.hourly) {
-    bm.hourly.temperature_2m = blendSeries(
-      bm.hourly.time, bm.hourly.temperature_2m, ec.hourly.time, ec.hourly.temperature_2m);
-  }
-  if (bm.daily && ec.daily) {
-    bm.daily.temperature_2m_max = blendSeries(
-      bm.daily.time, bm.daily.temperature_2m_max, ec.daily.time, ec.daily.temperature_2m_max);
-    bm.daily.temperature_2m_min = blendSeries(
-      bm.daily.time, bm.daily.temperature_2m_min, ec.daily.time, ec.daily.temperature_2m_min);
-  }
-  return bm;
-}
+// ====== Точность температуры ======
+// Температуру берём напрямую из модели best_match: Open-Meteo сам подбирает
+// самую точную модель ВЫСОКОГО разрешения для координат города (для нашего
+// региона — ICON-D2/локальные модели), которая правильно разрешает побережье.
+// Усреднение с глобальной ECMWF (сетка ~25 км) убрано намеренно: у Соснового
+// Бора её ячейка попадала на воду Финского залива и занижала температуру —
+// 11.7° против реальных 15.3° у best_match, в среднем 14° вместо настоящих ~18°.
 
 // ====== #3 Радарный нау-каст (RainViewer): фактические осадки по карте ======
 // Карта радара одна на оба города — берём метаданные один раз за обновление.
@@ -805,17 +755,14 @@ async function update() {
   // Метаданные радара — одни на оба города, тянем один раз (не критично, может быть null)
   const radarMeta = await fetchRadarMeta().catch(() => null);
 
-  // Для каждого города параллельно: базовая модель + ECMWF + радар.
-  // Критична только базовая модель; ECMWF и радар — необязательные улучшения.
+  // Для каждого города параллельно: погода (критично) + радар (необязательное улучшение).
   const results = await Promise.allSettled(CITIES.map(async (city) => {
-    const [bm, ec, radar] = await Promise.allSettled([
+    const [bm, radar] = await Promise.allSettled([
       fetchWeather(city),
-      fetchEcmwf(city),
       radarNowcastFor(city, radarMeta),
     ]);
-    if (bm.status !== "fulfilled") throw bm.reason; // нет базовых данных — карточка-ошибка
-    const data = blendEcmwf(bm.value, ec.status === "fulfilled" ? ec.value : null);
-    return { data, radar: radar.status === "fulfilled" ? radar.value : null };
+    if (bm.status !== "fulfilled") throw bm.reason; // нет данных — карточка-ошибка
+    return { data: bm.value, radar: radar.status === "fulfilled" ? radar.value : null };
   }));
 
   const cards = document.getElementById("cards");

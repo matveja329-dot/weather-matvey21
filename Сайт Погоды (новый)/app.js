@@ -1,0 +1,1325 @@
+// ====== Конфигурация городов ======
+const CITIES = [
+  { id: "sosnovy", name: "Сосновый Бор", lat: 59.8911, lon: 29.0786, tz: "Europe/Moscow" },
+  { id: "spb", name: "Санкт-Петербург", lat: 59.9386, lon: 30.3141, tz: "Europe/Moscow" },
+  { id: "sochi", name: "Сочи", lat: 43.6028, lon: 39.7342, tz: "Europe/Moscow" },
+];
+
+const REFRESH_MS = 3 * 60 * 1000; // автообновление каждые 3 минуты (чаще чем у Яндекса)
+const RETRY_MS = 25 * 1000;       // если город не загрузился (сеть/VPN моргнули) — быстрый повтор, не ждём полные 3 минуты
+
+// ====== Коды погоды WMO: описание + ключ иконки ======
+const WMO = {
+  0:  ["Ясно", "sun"],
+  1:  ["Малооблачно", "few"],
+  2:  ["Облачно с прояснениями", "partly"],
+  3:  ["Пасмурно", "cloud"],
+  45: ["Туман", "fog"],
+  48: ["Изморозь", "fog"],
+  51: ["Слабая морось", "drizzle"],
+  53: ["Морось", "drizzle"],
+  55: ["Сильная морось", "drizzle"],
+  56: ["Ледяная морось", "sleet"],
+  57: ["Ледяная морось", "sleet"],
+  61: ["Небольшой дождь", "rain"],
+  63: ["Дождь", "rain"],
+  65: ["Сильный дождь", "rain"],
+  66: ["Ледяной дождь", "sleet"],
+  67: ["Ледяной дождь", "sleet"],
+  71: ["Небольшой снег", "snow"],
+  73: ["Снег", "snow"],
+  75: ["Сильный снег", "snow"],
+  77: ["Снежная крупа", "snow"],
+  80: ["Кратковременный дождь", "rain"],
+  81: ["Ливень", "rain"],
+  82: ["Сильный ливень", "rain"],
+  85: ["Снегопад", "snow"],
+  86: ["Сильный снегопад", "snow"],
+  95: ["Гроза", "storm"],
+  96: ["Гроза с градом", "storm"],
+  99: ["Сильная гроза с градом", "storm"],
+};
+
+function wmoInfo(code) { return WMO[code] || ["Неизвестно", "cloud"]; }
+
+// ====== SVG-иконки погоды (день и ночь) ======
+const C = {
+  sun: '#ffd166', sunStroke: '#ffb454', cloud: '#e3ecff',
+  cloudDark: '#b6c4e0', rain: '#7cc4ff', snow: '#eaf4ff', bolt: '#ffd166',
+  moon: '#eef3ff', moonShade: '#c4d2f0',
+};
+
+// Лучи солнца — переиспользуем в нескольких иконках
+const SUN_RAYS = `<g class="wx-rays" fill="none" stroke="${C.sunStroke}" stroke-width="3" stroke-linecap="round">
+    <line x1="32" y1="6" x2="32" y2="14"/><line x1="32" y1="50" x2="32" y2="58"/>
+    <line x1="6" y1="32" x2="14" y2="32"/><line x1="50" y1="32" x2="58" y2="32"/>
+    <line x1="13" y1="13" x2="19" y2="19"/><line x1="45" y1="45" x2="51" y2="51"/>
+    <line x1="51" y1="13" x2="45" y2="19"/><line x1="19" y1="45" x2="13" y2="51"/></g>`;
+
+const ICONS = {
+  // Ясно — солнце
+  sun: `<svg viewBox="0 0 64 64">${SUN_RAYS}<circle class="wx-sun" cx="32" cy="32" r="12" fill="${C.sun}"/></svg>`,
+
+  // Ясно ночью — луна
+  moon: `<svg viewBox="0 0 64 64">
+    <path class="wx-moon" d="M40 10a22 22 0 1 0 14 38 17 17 0 0 1-14-38z" fill="${C.moon}"/>
+    <circle cx="45" cy="20" r="2.2" fill="${C.moonShade}"/>
+    <circle cx="52" cy="29" r="1.5" fill="${C.moonShade}"/>
+    <circle cx="44" cy="31" r="1.2" fill="${C.moonShade}"/></svg>`,
+
+  // Малооблачно — крупное солнце и небольшое облако
+  few: `<svg viewBox="0 0 64 64">
+    <g transform="translate(-5 -6)">${SUN_RAYS}<circle class="wx-sun" cx="32" cy="32" r="11" fill="${C.sun}"/></g>
+    <path class="wx-cloud" d="M27 52a8 8 0 0 1 7.7-9.8 9.6 9.6 0 0 1 18.1 3 6.4 6.4 0 0 1-.8 12.8H29a6.4 6.4 0 0 1-2-6z" fill="${C.cloud}"/></svg>`,
+
+  // Малооблачно ночью — луна и небольшое облако
+  fewNight: `<svg viewBox="0 0 64 64">
+    <path class="wx-moon" d="M28 8a15 15 0 1 0 9 25 12 12 0 0 1-9-25z" fill="${C.moon}"/>
+    <path class="wx-cloud" d="M27 52a8 8 0 0 1 7.7-9.8 9.6 9.6 0 0 1 18.1 3 6.4 6.4 0 0 1-.8 12.8H29a6.4 6.4 0 0 1-2-6z" fill="${C.cloud}"/></svg>`,
+
+  // Облачно с прояснениями — большое облако с солнцем сбоку
+  partly: `<svg viewBox="0 0 64 64">
+    <circle class="wx-sun" cx="18" cy="18" r="8" fill="${C.sun}"/>
+    <g class="wx-rays" fill="none" stroke="${C.sunStroke}" stroke-width="2" stroke-linecap="round">
+    <line x1="18" y1="4" x2="18" y2="9"/><line x1="4" y1="18" x2="9" y2="18"/>
+    <line x1="8" y1="8" x2="11.5" y2="11.5"/><line x1="28" y1="8" x2="24.5" y2="11.5"/></g>
+    <path class="wx-cloud" d="M16 48a11 11 0 0 1 10.8-13.5 13.5 13.5 0 0 1 25.5 4.5 9 9 0 0 1-1.3 18H18a9 9 0 0 1-2-9z" fill="${C.cloud}"/></svg>`,
+
+  // Облачно с прояснениями ночью — луна за облаком
+  partlyNight: `<svg viewBox="0 0 64 64">
+    <path class="wx-moon" d="M25 7a14 14 0 1 0 9 24 11 11 0 0 1-9-24z" fill="${C.moon}"/>
+    <path class="wx-cloud" d="M20 46a10 10 0 0 1 9.8-12 12 12 0 0 1 23 3.5 8 8 0 0 1-1 16H22a8 8 0 0 1-2-7.5z" fill="${C.cloud}"/></svg>`,
+
+  cloud: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 46a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 17H20a8.5 8.5 0 0 1-2-7.5z" fill="${C.cloud}"/></svg>`,
+
+  fog: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 38a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 13H20a8.5 8.5 0 0 1-2-3.5z" fill="${C.cloudDark}"/>
+    <g class="wx-fog" stroke="${C.cloud}" stroke-width="3" stroke-linecap="round">
+    <line x1="14" y1="50" x2="50" y2="50"/><line x1="20" y1="57" x2="44" y2="57"/></g></svg>`,
+
+  drizzle: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 38a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-rain" stroke="${C.rain}" stroke-width="3" stroke-linecap="round">
+    <line x1="26" y1="50" x2="24" y2="56"/><line x1="38" y1="50" x2="36" y2="56"/></g></svg>`,
+
+  rain: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-rain" stroke="${C.rain}" stroke-width="3.2" stroke-linecap="round">
+    <line x1="24" y1="48" x2="21" y2="57"/><line x1="33" y1="48" x2="30" y2="57"/>
+    <line x1="42" y1="48" x2="39" y2="57"/></g></svg>`,
+
+  sleet: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-rain" stroke="${C.rain}" stroke-width="3" stroke-linecap="round"><line x1="25" y1="48" x2="22" y2="56"/><line x1="40" y1="48" x2="37" y2="56"/></g>
+    <circle class="wx-snow" cx="33" cy="53" r="2.4" fill="${C.snow}"/></svg>`,
+
+  snow: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 36a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloud}"/>
+    <g class="wx-snow" fill="${C.snow}"><circle cx="25" cy="51" r="2.6"/><circle cx="33" cy="56" r="2.6"/><circle cx="41" cy="51" r="2.6"/></g></svg>`,
+
+  storm: `<svg viewBox="0 0 64 64">
+    <path class="wx-cloud" d="M18 34a11 11 0 0 1 10.5-13.5 13 13 0 0 1 24.5 4 8.5 8.5 0 0 1-1 14H20a8.5 8.5 0 0 1-2-4.5z" fill="${C.cloudDark}"/>
+    <path class="wx-bolt" d="M32 44l-8 11h7l-3 9 11-13h-7l4-7z" fill="${C.bolt}"/></svg>`,
+};
+
+// ====== Объёмные иконки (перекрывают плоские выше) ======
+// Мягкие градиенты дают объём, тень и лёгкая анимация — в style.css (.wx-*).
+// Ключи те же, поэтому iconFor() и весь рендер не меняются — только внешний вид.
+const GRAD = {
+  sun:       `<radialGradient id="gSun" cx="38%" cy="34%" r="70%"><stop offset="0%" stop-color="#fff7d4"/><stop offset="55%" stop-color="#ffd23f"/><stop offset="100%" stop-color="#f59e1b"/></radialGradient>`,
+  moon:      `<radialGradient id="gMoon" cx="35%" cy="30%" r="85%"><stop offset="0%" stop-color="#ffffff"/><stop offset="70%" stop-color="#e6edff"/><stop offset="100%" stop-color="#c2d1f2"/></radialGradient>`,
+  cloud:     `<linearGradient id="gCloud" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#d2dcf1"/></linearGradient>`,
+  cloudDark: `<linearGradient id="gCloudDark" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c6d1e7"/><stop offset="100%" stop-color="#92a1c1"/></linearGradient>`,
+  drop:      `<linearGradient id="gDrop" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a6dcff"/><stop offset="100%" stop-color="#3f93ff"/></linearGradient>`,
+  bolt:      `<linearGradient id="gBolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffe487"/><stop offset="100%" stop-color="#ff9d12"/></linearGradient>`,
+};
+const _defs  = (...keys) => `<defs>${keys.map((k) => GRAD[k]).join("")}</defs>`;
+const _drop  = (x, y) => `<path d="M${x} ${y} l2.3 4.6a2.6 2.6 0 1 1-4.6 0z" fill="url(#gDrop)"/>`;
+const _flake = (cx, cy) => `<g stroke="#ffffff" stroke-width="2" stroke-linecap="round"><line x1="${cx}" y1="${cy - 3.6}" x2="${cx}" y2="${cy + 3.6}"/><line x1="${cx - 3.1}" y1="${cy - 1.8}" x2="${cx + 3.1}" y2="${cy + 1.8}"/><line x1="${cx - 3.1}" y1="${cy + 1.8}" x2="${cx + 3.1}" y2="${cy - 1.8}"/></g>`;
+const _rays  = `<g class="wx-rays" fill="none" stroke="#ffb23a" stroke-width="3.4" stroke-linecap="round">
+    <line x1="32" y1="5" x2="32" y2="13"/><line x1="32" y1="51" x2="32" y2="59"/>
+    <line x1="5" y1="32" x2="13" y2="32"/><line x1="51" y1="32" x2="59" y2="32"/>
+    <line x1="12" y1="12" x2="18" y2="18"/><line x1="46" y1="46" x2="52" y2="52"/>
+    <line x1="52" y1="12" x2="46" y2="18"/><line x1="18" y1="46" x2="12" y2="52"/></g>`;
+
+Object.assign(ICONS, {
+  sun: `<svg viewBox="0 0 64 64" class="wx">${_defs('sun')}
+    <circle class="wx-glow" cx="32" cy="32" r="18" fill="#ffd23f" opacity=".18"/>
+    ${_rays}
+    <circle class="wx-sun" cx="32" cy="32" r="12.5" fill="url(#gSun)"/></svg>`,
+
+  moon: `<svg viewBox="0 0 64 64" class="wx">${_defs('moon')}
+    <path class="wx-moon" d="M41 11a22 22 0 1 0 13 39A18 18 0 0 1 41 11z" fill="url(#gMoon)"/>
+    <g fill="#fff" opacity=".85"><circle cx="47" cy="18" r="1.6"/><circle cx="54" cy="27" r="1.1"/><circle cx="45" cy="30" r="1"/></g></svg>`,
+
+  few: `<svg viewBox="0 0 64 64" class="wx">${_defs('sun','cloud')}
+    <g transform="translate(-5 -8)">
+      <g class="wx-rays" stroke="#ffb23a" stroke-width="3" stroke-linecap="round">
+        <line x1="32" y1="8" x2="32" y2="15"/><line x1="9" y1="32" x2="16" y2="32"/>
+        <line x1="48" y1="32" x2="55" y2="32"/><line x1="15" y1="15" x2="20" y2="20"/>
+        <line x1="49" y1="15" x2="44" y2="20"/></g>
+      <circle class="wx-sun" cx="32" cy="32" r="11" fill="url(#gSun)"/></g>
+    <path class="wx-cloud" d="M26 53a8 8 0 0 1 7.7-9.9 9.7 9.7 0 0 1 18.3 3 6.5 6.5 0 0 1-.8 12.9H28a6.5 6.5 0 0 1-2-6z" fill="url(#gCloud)"/></svg>`,
+
+  fewNight: `<svg viewBox="0 0 64 64" class="wx">${_defs('moon','cloud')}
+    <path class="wx-moon" d="M28 9a15 15 0 1 0 9 25 12 12 0 0 1-9-25z" fill="url(#gMoon)"/>
+    <path class="wx-cloud" d="M26 53a8 8 0 0 1 7.7-9.9 9.7 9.7 0 0 1 18.3 3 6.5 6.5 0 0 1-.8 12.9H28a6.5 6.5 0 0 1-2-6z" fill="url(#gCloud)"/></svg>`,
+
+  partly: `<svg viewBox="0 0 64 64" class="wx">${_defs('sun','cloud')}
+    <g transform="translate(-1 -1)">
+      <g class="wx-rays" stroke="#ffb23a" stroke-width="2.4" stroke-linecap="round">
+        <line x1="20" y1="3" x2="20" y2="8"/><line x1="5" y1="18" x2="10" y2="18"/>
+        <line x1="9" y1="7" x2="12.5" y2="10.5"/><line x1="31" y1="7" x2="27.5" y2="10.5"/></g>
+      <circle class="wx-sun" cx="20" cy="18" r="8.5" fill="url(#gSun)"/></g>
+    <path class="wx-cloud" d="M16 50a11 11 0 0 1 10.8-13.6 13.6 13.6 0 0 1 25.7 4.5A9 9 0 0 1 51 58H18a9 9 0 0 1-2-8z" fill="url(#gCloud)"/></svg>`,
+
+  partlyNight: `<svg viewBox="0 0 64 64" class="wx">${_defs('moon','cloud')}
+    <path class="wx-moon" d="M25 8a14 14 0 1 0 9 24 11 11 0 0 1-9-24z" fill="url(#gMoon)"/>
+    <path class="wx-cloud" d="M18 50a10.5 10.5 0 0 1 10.3-13 12.8 12.8 0 0 1 24.2 4.2A8.5 8.5 0 0 1 51 58H20a8.5 8.5 0 0 1-2-9z" fill="url(#gCloud)"/></svg>`,
+
+  cloud: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloud','cloudDark')}
+    <path class="wx-cloud2" d="M30 30a9 9 0 0 1 8.6-6.7 10.5 10.5 0 0 1 10 7.6 7 7 0 0 1-1 13.9H33a7 7 0 0 1-3-14.8z" fill="url(#gCloudDark)" opacity=".92"/>
+    <path class="wx-cloud" d="M14 50a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 48 56H16a8.6 8.6 0 0 1-2-6z" fill="url(#gCloud)"/></svg>`,
+
+  fog: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloud')}
+    <path class="wx-cloud" d="M16 38a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 50 44H18a8.6 8.6 0 0 1-2-6z" fill="url(#gCloud)"/>
+    <g class="wx-fog" stroke="#dfe8ff" stroke-width="3.2" stroke-linecap="round" opacity=".9">
+      <line x1="14" y1="51" x2="50" y2="51"/><line x1="19" y1="58" x2="45" y2="58"/></g></svg>`,
+
+  drizzle: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloud','drop')}
+    <path class="wx-cloud" d="M16 38a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 50 45H18a8.6 8.6 0 0 1-2-7z" fill="url(#gCloud)"/>
+    <g class="wx-rain">${_drop(27,49)}${_drop(38,49)}</g></svg>`,
+
+  rain: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloud','drop')}
+    <path class="wx-cloud" d="M16 36a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 50 43H18a8.6 8.6 0 0 1-2-7z" fill="url(#gCloud)"/>
+    <g class="wx-rain">${_drop(24,48)}${_drop(33,50)}${_drop(42,48)}</g></svg>`,
+
+  sleet: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloud','drop')}
+    <path class="wx-cloud" d="M16 36a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 50 43H18a8.6 8.6 0 0 1-2-7z" fill="url(#gCloud)"/>
+    <g class="wx-rain">${_drop(25,48)}${_drop(41,48)}</g>${_flake(33,52)}</svg>`,
+
+  snow: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloud')}
+    <path class="wx-cloud" d="M16 36a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 50 43H18a8.6 8.6 0 0 1-2-7z" fill="url(#gCloud)"/>
+    <g class="wx-snow">${_flake(25,50)}${_flake(33,56)}${_flake(41,50)}</g></svg>`,
+
+  storm: `<svg viewBox="0 0 64 64" class="wx">${_defs('cloudDark','bolt')}
+    <path class="wx-cloud" d="M16 34a11 11 0 0 1 10.6-13.6 13.2 13.2 0 0 1 24.8 4.1A8.6 8.6 0 0 1 50 41H18a8.6 8.6 0 0 1-2-7z" fill="url(#gCloudDark)"/>
+    <path class="wx-bolt" d="M33 40l-9 13h7l-3 10 12-15h-7l3-8z" fill="url(#gBolt)" stroke="#fff0b8" stroke-width=".6"/></svg>`,
+});
+
+// Иконка по коду WMO; ночью солнце меняем на луну
+function iconFor(code, isDay = true) {
+  let key = wmoInfo(code)[1];
+  if (!isDay) {
+    if (key === "sun") key = "moon";
+    else if (key === "few") key = "fewNight";
+    else if (key === "partly") key = "partlyNight";
+  }
+  return ICONS[key] || ICONS.cloud;
+}
+
+// ====== Вспомогательные функции ======
+const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function fmtTime(iso, tz) {
+  return new Date(iso).toLocaleTimeString("ru-RU", {
+    hour: "2-digit", minute: "2-digit", timeZone: tz,
+  });
+}
+
+function cityNow(tz) {
+  return new Date().toLocaleString("ru-RU", {
+    weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: tz,
+  });
+}
+
+function windDir(deg) {
+  const dirs = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Часть суток по часу начала
+function partOfDay(h) {
+  if (h < 6) return "ночью";
+  if (h < 12) return "утром";
+  if (h < 18) return "днём";
+  return "вечером";
+}
+
+// Тип осадков по коду (для текста)
+function precipType(code) {
+  const key = wmoInfo(code)[1];
+  if (key === "snow") return "снег";
+  if (key === "sleet") return "мокрый снег";
+  if (key === "drizzle") return "морось";
+  if (key === "storm") return "гроза";
+  if (key === "rain") return "дождь";
+  return "осадки";
+}
+
+// Единый порог «есть осадки»: миллиметры ИЛИ вероятность
+const WET_MM = 0.1;
+const WET_PROB = 45;
+function isWet(mm, pr) { return (mm || 0) >= WET_MM || (pr != null && pr >= WET_PROB); }
+
+// Разбор локального ISO-времени Open-Meteo (без сдвига часового пояса браузера)
+function isoDate(t) { return t.slice(0, 10); }                // "2026-05-29"
+function isoHour(t) { return parseInt(t.slice(11, 13), 10); } // 0..23
+
+// ====== fetch с таймаутом ======
+// На моргающем VPN обычный fetch может висеть минутами — приложение «залипает»
+// на скелетонах и кажется, что «не открылось». Таймаут даёт быстрый отказ,
+// после которого срабатывает авто-ретрай (RETRY_MS) или офлайн-кэш из sw.js.
+// ====== Доступ к данным сквозь блокировку провайдера ======
+// У ряда провайдеров (часто в РФ) сам домен api.open-meteo.com заблокирован — тогда
+// прямой запрос не проходит (ни DNS, ни TCP), погода не грузится, а сайт выглядит
+// «сломанным», хотя код цел. Чтобы работало БЕЗ VPN, мы достукиваемся по очереди:
+//   1) напрямую (быстро, когда не заблокировано — телефон, VPN);
+//   2) через ТВОЙ Cloudflare Worker (надёжно — см. PROXY_BASE ниже);
+//   3) через публичные CORS-прокси (бесплатно, но нестабильно — последняя попытка).
+//
+// >>> ЧТОБЫ ГРУЗИЛОСЬ БЕЗ VPN: разверни свой бесплатный Worker (инструкция в файле
+//     "БЕЗ VPN — как включить.txt", код — в "worker.js") и впиши его адрес сюда.
+//     Пример: const PROXY_BASE = "https://pogoda-proxy.ИМЯ.workers.dev";
+const PROXY_BASE = "";
+
+// Обёртки обхода: берут исходный URL, возвращают URL «в обход». Пробуются по порядку.
+const PROXIES = [
+  ...(PROXY_BASE ? [(u) => `${PROXY_BASE.replace(/\/$/, "")}/?url=${encodeURIComponent(u)}`] : []),
+  (u) => "https://cors.zme.ink/" + u,
+  (u) => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
+];
+
+// Один сетевой запрос с таймаутом (на моргающем VPN обычный fetch может висеть минутами).
+async function rawFetchJSON(url, timeout) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function fetchJSON(url, { timeout = 12000 } = {}) {
+  const u = String(url);
+  try {
+    return await rawFetchJSON(u, timeout);
+  } catch (e) {
+    // Обход применяем ТОЛЬКО к Open-Meteo (его и блокируют). Радар и прочее — как есть.
+    if (!/api\.open-meteo\.com/.test(u)) throw e;
+    for (const wrap of PROXIES) {
+      try {
+        return await rawFetchJSON(wrap(u), Math.max(timeout, 14000));
+      } catch (_) {
+        /* этот канал недоступен — пробуем следующий */
+      }
+    }
+    throw e; // ни напрямую, ни в обход — отдаём ошибку наверх (будет карточка-ошибка + авто-ретрай)
+  }
+}
+
+// ====== Запрос к Open-Meteo с максимальными параметрами ======
+// Основной запрос — модель best_match: даёт ВСЕ нужные поля (вероятность осадков,
+// 15-минутный нау-каст, УФ-индекс, видимость и т.д.) одним согласованным набором.
+// cell_selection=land — для прибрежных городов (Сосновый Бор, Сочи) гарантирует
+// ячейку на суше, а не на воде залива/моря, иначе температура занижается.
+async function fetchWeather(city) {
+  const url = new URL("https://api.open-meteo.com/v1/forecast");
+  url.search = new URLSearchParams({
+    latitude: city.lat,
+    longitude: city.lon,
+    timezone: city.tz,
+    current: "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,is_day,cloud_cover,dew_point_2m",
+    minutely_15: "precipitation,weather_code,temperature_2m",
+    hourly: "temperature_2m,weather_code,precipitation,precipitation_probability,is_day,cloud_cover,visibility,wind_speed_10m,wind_direction_10m,dew_point_2m,apparent_temperature",
+    daily: "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,precipitation_sum,precipitation_probability_max,precipitation_hours,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant",
+    forecast_days: "14",
+    wind_speed_unit: "ms",
+    models: "best_match",
+    cell_selection: "land",
+    _: Date.now(),
+  }).toString();
+
+  return fetchJSON(url);
+}
+
+// ====== Точность: ансамбль моделей для температуры ======
+// best_match подбирает ОДНУ модель — а она для нашего региона нередко занижает
+// (на тесте Сосновый Бор: best_match 17.5° против ICON-EU 18.6° / ECMWF 20.7°,
+// реальная ≈19°). Среднее нескольких хороших моделей статистически точнее любой
+// одной. Берём ТОЛЬКО две модели высокого разрешения для Европы: ICON-EU (~7 км)
+// и ECMWF IFS (~9 км). Грубую глобальную GFS (ячейка ~25 км) намеренно убрали —
+// она «размывала» среднее и тянула точность вниз. Температуру и «ощущается как»
+// берём из этого ансамбля, всё остальное (осадки, коды погоды, ветер, УФ) —
+// из best_match. Запрос необязательный: не загрузился — рисуем по best_match.
+const ENSEMBLE_MODELS = ["icon_eu", "ecmwf_ifs025"];
+
+async function fetchEnsembleTemps(city) {
+  const url = new URL("https://api.open-meteo.com/v1/forecast");
+  url.search = new URLSearchParams({
+    latitude: city.lat,
+    longitude: city.lon,
+    timezone: city.tz,
+    hourly: "temperature_2m,apparent_temperature",
+    forecast_days: "3",
+    models: ENSEMBLE_MODELS.join(","),
+    cell_selection: "land",
+    _: Date.now(),
+  }).toString();
+  return fetchJSON(url, { timeout: 10000 });
+}
+
+// Среднее по доступным (не-null) значениям; null, если данных нет вовсе
+function meanDefined(vals) {
+  const ok = vals.filter((v) => v != null && !Number.isNaN(v));
+  return ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : null;
+}
+
+// Накладываем ансамблевые температуры на ответ best_match (тот же запрос по форме).
+// Где ансамбля нет (дальние дни — ICON-EU короткий) — оставляем значение best_match.
+function applyEnsemble(base, ens) {
+  if (!ens || !base) return;
+  const eh = ens.hourly, bh = base.hourly;
+
+  // Сводим ряд field из всех моделей в один усреднённый, выровненный по времени base
+  const blend = (src, dst, field) => {
+    if (!src || !dst || !dst[field] || !dst.time || !src.time) return null;
+    if (src.time[0] !== dst.time[0]) return null; // сетки времени не сошлись — не рискуем
+    return dst[field].map((bv, i) => {
+      const m = meanDefined(ENSEMBLE_MODELS.map((mm) => {
+        const arr = src[`${field}_${mm}`];
+        return arr ? arr[i] : null;
+      }));
+      return m != null ? m : bv;
+    });
+  };
+
+  const t  = blend(eh, bh, "temperature_2m");
+  const at = blend(eh, bh, "apparent_temperature");
+  if (t)  bh.temperature_2m = t;
+  if (at) bh.apparent_temperature = at;
+
+  // «Сейчас»: берём усреднённое значение на текущий час, чтобы большое число
+  // совпадало с первой плиткой почасового прогноза (одна и та же база).
+  if (t) {
+    const ct = new Date(base.current.time);
+    const idx = bh.time.findIndex((tt) => {
+      const d = new Date(tt);
+      return d.getHours() === ct.getHours() && d.getDate() === ct.getDate();
+    });
+    if (idx >= 0) {
+      if (t[idx]  != null) base.current.temperature_2m = t[idx];
+      if (at && at[idx] != null) base.current.apparent_temperature = at[idx];
+    }
+  }
+
+  // Дневные max/min НЕ усредняем намеренно: на дальних днях (10–14) короткая модель
+  // ICON-EU данных не даёт, и среднее по оставшейся ECMWF резко расходится с best_match —
+  // 14-дневный список «прыгал» бы, а код погоды (от best_match) не совпадал бы с
+  // температурой. Список дней оставляем целиком из best_match — он согласован сам с собой.
+}
+
+// Историческая заметка: раньше температура бралась из одной модели best_match,
+// а усреднение с ECMWF было выключено, потому что её ячейка (сетка ~25 км) попадала
+// на воду Финского залива и занижала температуру. Теперь это решено иначе —
+// cell_selection=land гарантирует ячейку на суше у всех моделей, поэтому усреднение
+// ансамбля (см. applyEnsemble выше) снова безопасно и даёт более точное число.
+
+// ====== #3 Радарный нау-каст (RainViewer): фактические осадки по карте ======
+// Карта радара одна на оба города — берём метаданные один раз за обновление.
+async function fetchRadarMeta() {
+  try {
+    return await fetchJSON("https://api.rainviewer.com/public/weather-maps.json", { timeout: 7000 });
+  } catch (e) {
+    console.warn("RainViewer недоступен:", e);
+    return null;
+  }
+}
+
+// lon/lat → номер тайла и пиксель внутри него (Web Mercator, как в slippy-картах)
+function lonLatToTilePixel(lon, lat, z, tile) {
+  const n = Math.pow(2, z);
+  const xf = (lon + 180) / 360 * n;
+  const latRad = lat * Math.PI / 180;
+  const yf = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+  const xtile = Math.floor(xf), ytile = Math.floor(yf);
+  return {
+    xtile, ytile,
+    px: Math.min(tile - 1, Math.floor((xf - xtile) * tile)),
+    py: Math.min(tile - 1, Math.floor((yf - ytile) * tile)),
+  };
+}
+
+// Один canvas на все чтения тайлов — не создаём DOM-узел на каждый пиксель (оптимизация).
+let _radarCanvas = null;
+function radarCtx(w, h) {
+  if (!_radarCanvas) _radarCanvas = document.createElement("canvas");
+  if (_radarCanvas.width !== w)  _radarCanvas.width = w;
+  if (_radarCanvas.height !== h) _radarCanvas.height = h;
+  return _radarCanvas.getContext("2d", { willReadFrequently: true });
+}
+
+// Читаем альфу одного пикселя радарного тайла. -1 = не удалось (CORS/нет тайла/таймаут) → радар недоступен.
+// Таймаут важен на VPN: иначе зависший тайл задерживает отрисовку карточки города.
+function samplePixel(url, px, py) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+    const timer = setTimeout(() => finish(-1), 5000);
+    img.onload = () => {
+      try {
+        const ctx = radarCtx(img.width, img.height);
+        ctx.drawImage(img, 0, 0);
+        finish(ctx.getImageData(px, py, 1, 1).data[3]);
+      } catch (e) {
+        finish(-1); // канвас «затаинтился» из-за CORS — пиксель не прочитать
+      }
+    };
+    img.onerror = () => finish(-1);
+    img.src = url;
+  });
+}
+
+// Анализ кадров радара: что сейчас и когда начнётся/кончится в ближайший час.
+// Если радар «чист» — НЕ утверждаем «сухо» (могло просто не быть покрытия), отдаём прогноз модели.
+function analyzeRadar(samples) {
+  const WET = 20; // порог альфы: ниже — фон/слабый шум
+  const now = Date.now();
+  let nowIdx = 0;
+  samples.forEach((s, i) => { if (s.time <= now) nowIdx = i; });
+  const wet = (s) => s.a >= WET;
+
+  if (wet(samples[nowIdx])) {
+    for (let j = nowIdx + 1; j < samples.length; j++) {
+      if (!wet(samples[j])) return { kind: "stop", time: samples[j].time };
+    }
+    return { kind: "ongoing" };
+  }
+  for (let j = nowIdx + 1; j < samples.length; j++) {
+    if (wet(samples[j])) return { kind: "start", time: samples[j].time };
+  }
+  return null; // по радару осадков нет — пусть решает модель
+}
+
+async function radarNowcastFor(city, meta) {
+  if (!meta || !meta.radar || !meta.host) return null;
+  // Последние кадры факта (≈30 мин) + прогнозные кадры, если RainViewer их отдаёт.
+  // Прогноз сейчас может быть пуст — тогда работаем по факту: «идут ли осадки прямо сейчас».
+  const frames = [...(meta.radar.past || []).slice(-3), ...(meta.radar.nowcast || [])];
+  if (!frames.length) return null;
+
+  const z = 7; // зум: ~0.6 км/пиксель на широте СПб — точно по точке города
+  const { xtile, ytile, px, py } = lonLatToTilePixel(city.lon, city.lat, z, 256);
+
+  const samples = await Promise.all(frames.map((f) =>
+    samplePixel(`${meta.host}${f.path}/256/${z}/${xtile}/${ytile}/2/1_1.png`, px, py)
+      .then((a) => ({ time: f.time * 1000, a }))
+  ));
+  // хоть один кадр не прочитался (CORS/нет тайла) → радар ненадёжен, не используем
+  if (samples.some((s) => s.a < 0)) return null;
+  return analyzeRadar(samples);
+}
+
+// Тип осадков, когда его подсказывает только радар (без кода погоды): по температуре
+function guessPrecipType(cur) {
+  return (cur && cur.temperature_2m != null && cur.temperature_2m <= 1) ? "снег" : "дождь";
+}
+
+// ====== Анализ осадков: когда начнётся / закончится и окна на сутки ======
+
+// Нау-каст по 15-минутным данным — точное время старта/окончания в ближайшие 2 часа
+function nowcast(data) {
+  const M = data.minutely_15;
+  if (!M || !M.time) return null;
+  const now = Date.now();
+  let i = M.time.findIndex((t) => new Date(t).getTime() >= now);
+  if (i < 0) return null;
+  const p = M.precipitation || [];
+  const codes = M.weather_code || [];
+  const wetNow = (p[i - 1] || 0) > 0 || (p[i] || 0) > 0;
+  const horizon = Math.min(i + 8, M.time.length); // ~2 часа
+
+  if (wetNow) {
+    for (let j = i; j < horizon; j++) {
+      if (!((p[j] || 0) > 0)) return { kind: "stop", time: M.time[j], code: codes[i] };
+    }
+    return { kind: "ongoing", code: codes[i] };
+  }
+  for (let j = i; j < horizon; j++) {
+    if ((p[j] || 0) > 0) return { kind: "start", time: M.time[j], code: codes[j] };
+  }
+  return null;
+}
+
+// Окна осадков на ближайшие 24 часа по почасовым данным
+function precipWindows(data, cur) {
+  const H = data.hourly;
+  if (!H || !H.time) return [];
+  const ct = new Date(cur.time);
+  const curHourMs = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), ct.getHours()).getTime();
+  let start = H.time.findIndex((t) => new Date(t).getTime() >= curHourMs);
+  if (start < 0) start = 0;
+  const end = Math.min(start + 24, H.time.length);
+
+  const prob = H.precipitation_probability || [];
+  const wins = [];
+  let w = null;
+  for (let i = start; i < end; i++) {
+    const mm = H.precipitation ? (H.precipitation[i] || 0) : 0;
+    const pr = prob[i] != null ? prob[i] : null;
+    const wet = isWet(mm, pr);
+    const hour = new Date(H.time[i]).getHours();
+    if (wet) {
+      if (!w) w = { startHour: hour, startT: H.time[i], sum: 0, maxProb: 0, code: H.weather_code[i], maxMm: 0 };
+      w.sum += mm;
+      if (pr != null && pr > w.maxProb) w.maxProb = pr;
+      if (mm > w.maxMm) { w.maxMm = mm; w.code = H.weather_code[i]; }
+      w.endHour = hour;
+    } else if (w) { wins.push(w); w = null; }
+  }
+  if (w) wins.push(w);
+  return wins;
+}
+
+function fmtWindow(w) {
+  const type = precipType(w.code);
+  const endH = (w.endHour + 1) % 24;
+  const range = `с ${pad2(w.startHour)}:00 до ${pad2(endH)}:00`;
+  const probTxt = w.maxProb ? ` · ${w.maxProb}%` : "";
+  const mmTxt = w.sum >= 0.1 ? ` · ~${w.sum < 1 ? w.sum.toFixed(1) : Math.round(w.sum)} мм` : "";
+  return `${cap(type)} ${partOfDay(w.startHour)}, ${range}${probTxt}${mmTxt}`;
+}
+
+// Когда за конкретный день ждать осадки: какие части суток (утром/днём/вечером/ночью).
+// Для «сегодня» через minHour отбрасываем уже прошедшие часы.
+function dayPrecipParts(data, dateStr, minHour = -1) {
+  const H = data.hourly;
+  if (!H || !H.time) return { parts: [], maxProb: 0 };
+  const prob = H.precipitation_probability || [];
+  const acc = {
+    "утром":   { mm: 0, pr: 0 },
+    "днём":    { mm: 0, pr: 0 },
+    "вечером": { mm: 0, pr: 0 },
+    "ночью":   { mm: 0, pr: 0 },
+  };
+  for (let i = 0; i < H.time.length; i++) {
+    if (isoDate(H.time[i]) !== dateStr) continue;
+    const hr = isoHour(H.time[i]);
+    if (hr < minHour) continue;
+    const mm = H.precipitation ? (H.precipitation[i] || 0) : 0;
+    const pr = prob[i] != null ? prob[i] : 0;
+    if (!isWet(mm, pr)) continue;
+    const part = partOfDay(hr);
+    acc[part].mm += mm;
+    if (pr > acc[part].pr) acc[part].pr = pr;
+  }
+  const order = ["утром", "днём", "вечером", "ночью"];
+  const parts = order.filter((p) => acc[p].mm > 0 || acc[p].pr >= WET_PROB);
+  let maxProb = 0;
+  parts.forEach((p) => { if (acc[p].pr > maxProb) maxProb = acc[p].pr; });
+  return { parts, maxProb };
+}
+
+// Собираем готовый блок: главная строка (нау-каст) + окна на сутки.
+// radar — результат radarNowcastFor (может быть null); если радар видит осадки, он главнее модели.
+function buildPrecip(data, cur, tz, radar) {
+  const wins = precipWindows(data, cur);
+  let headline, headClass = "dry";
+
+  // Радар отдаёт только факт «мокро/сухо» без типа — тип берём по температуре
+  if (radar && radar.kind) {
+    const t = cap(guessPrecipType(cur));
+    if (radar.kind === "start") {
+      headline = `${t} начнётся около ${fmtTime(radar.time, tz)} (по радару)`;
+      headClass = "soon";
+    } else if (radar.kind === "ongoing") {
+      headline = `Сейчас идут осадки (по радару)`;
+      headClass = "now";
+    } else if (radar.kind === "stop") {
+      headline = `Осадки закончатся около ${fmtTime(radar.time, tz)} (по радару)`;
+      headClass = "now";
+    }
+    return { headline, headClass, lines: wins.map(fmtWindow) };
+  }
+
+  // Радара нет (или чисто) — обычный модельный нау-каст
+  const nc = nowcast(data);
+  if (nc && nc.kind === "start") {
+    headline = `${cap(precipType(nc.code))} начнётся около ${fmtTime(nc.time, tz)}`;
+    headClass = "soon";
+  } else if (nc && nc.kind === "ongoing") {
+    headline = `Сейчас идут осадки`;
+    headClass = "now";
+  } else if (nc && nc.kind === "stop") {
+    headline = `Осадки закончатся около ${fmtTime(nc.time, tz)}`;
+    headClass = "now";
+  } else if (wins.length) {
+    const w = wins[0];
+    headline = `${cap(precipType(w.code))} ожидается ${partOfDay(w.startHour)}, около ${pad2(w.startHour)}:00`;
+    headClass = "soon";
+  } else {
+    headline = `Осадков не ожидается ближайшие сутки`;
+    headClass = "dry";
+  }
+
+  const lines = wins.map(fmtWindow);
+  return { headline, headClass, lines };
+}
+
+// ====== Спарклайн температуры на 24 часа ======
+// Плавная SVG-кривая температуры: заливка-градиент, метки min/max и точка «сейчас».
+// Цвет линии завязан на саму температуру (тёплый верх → холодный низ),
+// плюс мягкая подсветка ночных часов по is_day. Логику данных не трогаем —
+// берём те же почасовые значения, что и в почасовом прогнозе ниже.
+function buildSparkline(data, tz, startIdx, cityId) {
+  const H = data.hourly;
+  if (!H || !H.time || !H.temperature_2m) return "";
+  const n = Math.min(24, H.time.length - startIdx);
+  if (n < 2) return "";
+
+  const temps = [], times = [], days = [];
+  for (let k = 0; k < n; k++) {
+    const i = startIdx + k;
+    temps.push(H.temperature_2m[i]);
+    times.push(H.time[i]);
+    days.push(H.is_day ? H.is_day[i] : 1);
+  }
+
+  // Координатная сетка viewBox (тянется по ширине карточки, пропорции сохраняются)
+  const W = 720, VH = 158;
+  const padX = 26, padTop = 30, padBot = 30;
+  const innerW = W - padX * 2;
+  const innerH = VH - padTop - padBot;
+  const baseY = padTop + innerH;
+
+  let tMin = Math.min(...temps), tMax = Math.max(...temps);
+  if (tMax - tMin < 1) { tMax += 0.5; tMin -= 0.5; } // не вырождаем плоскую кривую
+  const span = tMax - tMin;
+
+  const xAt = (k) => padX + (innerW * k) / (n - 1);
+  const yAt = (t) => padTop + innerH * (1 - (t - tMin) / span);
+  const pts = temps.map((t, k) => [xAt(k), yAt(t)]);
+
+  // Гладкая кривая: Catmull-Rom → кубические безье
+  let line = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    line += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  const area = `${line} L ${pts[n - 1][0].toFixed(1)} ${baseY.toFixed(1)} L ${pts[0][0].toFixed(1)} ${baseY.toFixed(1)} Z`;
+
+  // Экстремумы
+  let iMin = 0, iMax = 0;
+  temps.forEach((t, k) => { if (t < temps[iMin]) iMin = k; if (t > temps[iMax]) iMax = k; });
+
+  // Мягкая подсветка ночных интервалов (объединяем подряд идущие ночные часы)
+  let bands = "", runStart = null;
+  for (let k = 0; k <= n; k++) {
+    const isNight = k < n && days[k] === 0;
+    if (isNight && runStart === null) runStart = k;
+    if (!isNight && runStart !== null) {
+      const x0 = xAt(Math.max(0, runStart - 0.5));
+      const x1 = xAt(Math.min(n - 1, k - 1 + 0.5));
+      bands += `<rect class="sp-night" rx="9" ry="9" x="${x0.toFixed(1)}" y="${(padTop - 6).toFixed(1)}" width="${(x1 - x0).toFixed(1)}" height="${(innerH + 4).toFixed(1)}"/>`;
+      runStart = null;
+    }
+  }
+
+  // Подписи часов (каждые 6 часов)
+  let ticks = "";
+  for (let k = 0; k < n; k += 6) {
+    const anchor = k === 0 ? "start" : (k >= n - 1 ? "end" : "middle");
+    ticks += `<text class="sp-tick" x="${xAt(k).toFixed(1)}" y="${VH - 8}" text-anchor="${anchor}">${fmtTime(times[k], tz)}</text>`;
+  }
+
+  // Маркер экстремума с подписью температуры
+  const mark = (k, cls, above) => {
+    const px = xAt(k), py = yAt(temps[k]);
+    let anchor = "middle", lx = px;
+    if (px < padX + 16) { anchor = "start"; lx = px - 3; }
+    else if (px > W - padX - 16) { anchor = "end"; lx = px + 3; }
+    const ly = above ? py - 11 : py + 19;
+    return `<line class="sp-stem" x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="${baseY.toFixed(1)}"/>
+      <circle class="sp-dot ${cls}" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3.4"/>
+      <text class="sp-lab ${cls}" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}">${Math.round(temps[k])}°</text>`;
+  };
+
+  const gStroke = `spk-stroke-${cityId}`;
+  const gArea = `spk-area-${cityId}`;
+  const now = `<circle class="sp-now-halo" cx="${pts[0][0].toFixed(1)}" cy="${pts[0][1].toFixed(1)}" r="6"/>
+    <circle class="sp-now" cx="${pts[0][0].toFixed(1)}" cy="${pts[0][1].toFixed(1)}" r="3.6"/>`;
+
+  return `<svg class="spark-svg" viewBox="0 0 ${W} ${VH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="График температуры на ближайшие 24 часа">
+    <defs>
+      <linearGradient id="${gStroke}" gradientUnits="userSpaceOnUse" x1="0" y1="${padTop}" x2="0" y2="${baseY}">
+        <stop offset="0%" stop-color="#ff8d6b"/>
+        <stop offset="48%" stop-color="#ffd166"/>
+        <stop offset="100%" stop-color="#6bd6ff"/>
+      </linearGradient>
+      <linearGradient id="${gArea}" gradientUnits="userSpaceOnUse" x1="0" y1="${padTop}" x2="0" y2="${baseY}">
+        <stop offset="0%" stop-color="rgba(124,196,255,.40)"/>
+        <stop offset="100%" stop-color="rgba(124,196,255,0)"/>
+      </linearGradient>
+    </defs>
+    ${bands}
+    <path class="sp-area" d="${area}" fill="url(#${gArea})"/>
+    <path class="sp-line" d="${line}" fill="none" stroke="url(#${gStroke})"/>
+    ${ticks}
+    ${mark(iMax, "sp-max", true)}
+    ${mark(iMin, "sp-min", true)}
+    ${now}
+  </svg>`;
+}
+
+// ====== Рендер одной карточки ======
+function renderCard(city, data, radar) {
+  const tpl = document.getElementById("cardTemplate");
+  const node = tpl.content.cloneNode(true);
+  const cur = data.current;
+  const [desc] = wmoInfo(cur.weather_code);
+
+  node.querySelector(".city-name").textContent = city.name;
+  node.querySelector(".city-time").textContent = cityNow(city.tz);
+  node.querySelector(".now-icon").innerHTML = iconFor(cur.weather_code, cur.is_day === 1);
+  node.querySelector(".temp").textContent = Math.round(cur.temperature_2m);
+  node.querySelector(".desc").textContent = desc;
+  node.querySelector(".feels-val").textContent = Math.round(cur.apparent_temperature);
+  node.querySelector(".t-max").textContent = Math.round(data.daily.temperature_2m_max[0]);
+  node.querySelector(".t-min").textContent = Math.round(data.daily.temperature_2m_min[0]);
+
+  // Ветер: оба поля могут не прийти в неполном ответе — без guard `.toFixed()`
+  // упал бы и увёл весь город в карточку-ошибку. Показываем «—», но город рисуем.
+  node.querySelector(".wind").textContent =
+    cur.wind_speed_10m != null
+      ? `${cur.wind_speed_10m.toFixed(1)} м/с ${cur.wind_direction_10m != null ? windDir(cur.wind_direction_10m) : ""}`.trim()
+      : "—";
+  node.querySelector(".humidity").textContent = `${cur.relative_humidity_2m}%`;
+  node.querySelector(".pressure").textContent =
+    `${Math.round(cur.pressure_msl * 0.750062)} мм`;
+  node.querySelector(".precip").textContent = `${cur.precipitation} мм`;
+  node.querySelector(".gusts").textContent =
+    cur.wind_gusts_10m != null ? `${cur.wind_gusts_10m.toFixed(1)} м/с` : "—";
+  const uv = data.daily.uv_index_max ? data.daily.uv_index_max[0] : null;
+  node.querySelector(".uv").textContent = uv != null ? Math.round(uv) : "—";
+
+  // Добавляем точку росы
+  const dewPoint = cur.dew_point_2m != null ? Math.round(cur.dew_point_2m) : null;
+  if (dewPoint != null) {
+    node.querySelector(".feels").innerHTML = `ощущается как <b class="feels-val">${Math.round(cur.apparent_temperature)}</b>° · точка росы ${dewPoint}°`;
+  } else {
+    node.querySelector(".feels").innerHTML = `ощущается как <b class="feels-val">${Math.round(cur.apparent_temperature)}</b>°`;
+  }
+
+  node.querySelector(".sunrise").textContent = fmtTime(data.daily.sunrise[0], city.tz);
+  node.querySelector(".sunset").textContent = fmtTime(data.daily.sunset[0], city.tz);
+
+  // ----- Блок «Когда ждать осадки» -----
+  const precip = buildPrecip(data, cur, city.tz, radar);
+  const pb = node.querySelector(".precip-block");
+  pb.classList.add("p-" + precip.headClass);
+  pb.querySelector(".precip-headline").textContent = precip.headline;
+  const linesBox = pb.querySelector(".precip-lines");
+  if (precip.lines.length) {
+    precip.lines.forEach((t) => {
+      const el = document.createElement("div");
+      el.className = "precip-line";
+      el.textContent = t;
+      linesBox.appendChild(el);
+    });
+  } else {
+    linesBox.remove();
+  }
+
+  // ----- Почасовой прогноз (24 часа вместо 12) с вероятностью осадков -----
+  const hourly = node.querySelector(".hourly");
+  const nowH = new Date(cur.time).getHours();
+  const nowDate = new Date(cur.time).getDate();
+  let startIdx = data.hourly.time.findIndex((t) => {
+    const dt = new Date(t);
+    return dt.getHours() === nowH && dt.getDate() === nowDate;
+  });
+  if (startIdx < 0) startIdx = 0;
+
+  const prob = data.hourly.precipitation_probability || [];
+  const fragment = document.createDocumentFragment();
+
+  // Показываем 24 часа вместо 12 для более детального прогноза
+  for (let i = startIdx; i < startIdx + 24 && i < data.hourly.time.length; i++) {
+    const mm = data.hourly.precipitation ? (data.hourly.precipitation[i] || 0) : 0;
+    const pr = prob[i] != null ? prob[i] : null;
+    const wet = isWet(mm, pr);
+    const h = document.createElement("div");
+    h.className = "hour" + (wet ? " wet" : "");
+
+    // Добавляем ощущаемую температуру в тултип
+    const apparentTemp = data.hourly.apparent_temperature ? Math.round(data.hourly.apparent_temperature[i]) : null;
+    const windSpeed = data.hourly.wind_speed_10m ? data.hourly.wind_speed_10m[i].toFixed(1) : null;
+
+    h.innerHTML = `<div class="h-time">${fmtTime(data.hourly.time[i], city.tz)}</div>
+      ${iconFor(data.hourly.weather_code[i], (data.hourly.is_day ? data.hourly.is_day[i] : 1) === 1)}
+      <div class="h-temp">${Math.round(data.hourly.temperature_2m[i])}°</div>
+      ${pr != null ? `<div class="h-prob${wet ? " on" : ""}">${pr}%</div>` : ""}`;
+
+    // Добавляем дополнительную информацию в data-атрибуты для тултипа
+    if (apparentTemp != null) h.setAttribute("title", `Ощущается: ${apparentTemp}°${windSpeed ? ` · Ветер: ${windSpeed} м/с` : ""}`);
+
+    fragment.appendChild(h);
+  }
+  hourly.appendChild(fragment);
+
+  // ----- Спарклайн: плавная кривая температуры на те же 24 часа -----
+  const spark = node.querySelector(".spark");
+  if (spark) spark.innerHTML = buildSparkline(data, city.tz, startIdx, city.id);
+
+  // ----- Прогноз на 14 дней (вместо 7): КОГДА именно ждать осадки (утром/днём/вечером) -----
+  const daily = node.querySelector(".daily");
+  const dProb = data.daily.precipitation_probability_max || [];
+  const curHour = new Date(cur.time).getHours();
+  const dailyFragment = document.createDocumentFragment();
+
+  for (let i = 0; i < data.daily.time.length; i++) {
+    const dateStr = isoDate(data.daily.time[i]);
+    const date = new Date(dateStr + "T12:00");
+    const dayName = WEEKDAYS[date.getDay()];
+    const dayNum = date.getDate();
+    const monthNum = date.getMonth() + 1;
+    const label = i === 0 ? "Сегодня" : `${dayName}, ${dayNum}.${monthNum < 10 ? '0' + monthNum : monthNum}`;
+    const pr = dProb[i] != null ? dProb[i] : null;
+    const dp = dayPrecipParts(data, dateStr, i === 0 ? curHour : -1);
+
+    // Описание погоды для дня
+    const [weatherDesc] = wmoInfo(data.daily.weather_code[i]);
+
+    // Добавляем информацию о ветре для дня
+    const windMax = data.daily.wind_speed_10m_max ? data.daily.wind_speed_10m_max[i] : null;
+    const gustsMax = data.daily.wind_gusts_10m_max ? data.daily.wind_gusts_10m_max[i] : null;
+
+    let whenHtml = "";
+    if (dp.parts.length) {
+      const probTxt = dp.maxProb ? ` · ${dp.maxProb}%` : "";
+      whenHtml = `<span class="d-when on">💧 ${dp.parts.join(", ")}${probTxt}</span>`;
+    } else if (pr != null && pr >= 25) {
+      whenHtml = `<span class="d-when">возможны осадки · ${pr}%</span>`;
+    } else {
+      // Показываем описание погоды + ветер если сильный
+      let windInfo = "";
+      if (windMax && windMax > 7) {
+        windInfo = ` · ветер до ${windMax.toFixed(0)} м/с`;
+      }
+      whenHtml = `<span class="d-when">${weatherDesc}${windInfo}</span>`;
+    }
+
+    // Компактная пометка осадков для мобильной «плитки» дня (подробный текст там скрыт).
+    let precMini = "";
+    if (dp.parts.length) precMini = dp.maxProb ? `💧 ${dp.maxProb}%` : "💧";
+    else if (pr != null && pr >= 25) precMini = `${pr}%`;
+
+    const row = document.createElement("div");
+    row.className = "day";
+
+    // Добавляем тултип с подробной информацией
+    const tooltipParts = [];
+    if (windMax) tooltipParts.push(`Ветер: до ${windMax.toFixed(1)} м/с`);
+    if (gustsMax) tooltipParts.push(`Порывы: до ${gustsMax.toFixed(1)} м/с`);
+    const precipHours = data.daily.precipitation_hours ? data.daily.precipitation_hours[i] : null;
+    if (precipHours) tooltipParts.push(`Осадки: ${precipHours}ч`);
+
+    row.innerHTML = `
+      <span class="d-ico">${iconFor(data.daily.weather_code[i], true)}</span>
+      <span class="d-info">
+        <span class="d-name">${label}</span>
+        ${whenHtml}
+        <span class="d-prec">${precMini}</span>
+      </span>
+      <span class="d-temps">
+        <span class="dt-min">${Math.round(data.daily.temperature_2m_min[i])}°</span>
+        <span class="bar"></span>
+        <span class="dt-max">${Math.round(data.daily.temperature_2m_max[i])}°</span>
+      </span>`;
+
+    if (tooltipParts.length > 0) {
+      row.setAttribute("title", tooltipParts.join(" · "));
+    }
+
+    dailyFragment.appendChild(row);
+  }
+  daily.appendChild(dailyFragment);
+
+  return { node, isDay: cur.is_day === 1, code: cur.weather_code };
+}
+
+function renderError(city) {
+  const art = document.createElement("article");
+  art.className = "card error";
+  art.innerHTML = `<div class="err-icon">⚠</div>
+    <div class="city-name">${city.name}</div>
+    <p class="feels">Не удалось загрузить погоду. Попробую снова автоматически.</p>`;
+  return art;
+}
+
+// ====== Скелетон-карточка: держит место и шиммерит, пока грузятся данные ======
+// Главное против «мигания»: на старте экран сразу выглядит как приложение,
+// реклама не подпрыгивает под шапку и нет резкого скачка вёрстки при загрузке.
+function skeletonCard(city) {
+  const art = document.createElement("article");
+  art.className = "card skeleton";
+  const reps = (n, html) => Array.from({ length: n }, () => html).join("");
+  art.innerHTML = `
+    <div class="card-head">
+      <div class="city">
+        <span class="sk sk-text" style="width:46%"></span>
+        <span class="sk sk-text" style="width:62%;margin-top:9px"></span>
+      </div>
+      <span class="sk sk-circle"></span>
+    </div>
+    <div class="now">
+      <span class="sk sk-temp"></span>
+      <div class="now-meta">
+        <span class="sk sk-text" style="width:70%"></span>
+        <span class="sk sk-text" style="width:55%"></span>
+        <span class="sk sk-text" style="width:40%"></span>
+      </div>
+    </div>
+    <div class="sk sk-bar" style="height:66px;margin-bottom:20px"></div>
+    <div class="details">${reps(6, '<span class="sk sk-detail"></span>')}</div>
+    <div class="section-title"><span class="sk sk-text" style="width:160px"></span></div>
+    <div class="sk sk-spark"></div>
+    <div class="section-title"><span class="sk sk-text" style="width:130px"></span></div>
+    <div class="hourly sk-row">${reps(8, '<span class="sk sk-hour"></span>')}</div>
+    <div class="section-title"><span class="sk sk-text" style="width:90px"></span></div>
+    <div class="daily">${reps(7, '<span class="sk sk-day"></span>')}</div>`;
+  if (city) art.querySelector(".city .sk-text").setAttribute("aria-label", city.name);
+  return art;
+}
+
+// Мгновенно показываем заглушки под все города (синхронно, до первого fetch)
+function showSkeletons() {
+  const cards = document.getElementById("cards");
+  if (!cards || cards.children.length) return;
+  const frag = document.createDocumentFragment();
+  CITIES.forEach((c) => frag.appendChild(skeletonCard(c)));
+  cards.appendChild(frag);
+}
+
+// ====== Тема фона по погоде и времени суток ======
+const THEMES = {
+  clearDay:   ["#2b6cd4", "#5fa8e8"],
+  clearNight: ["#0f1840", "#1f2e63"],
+  cloudDay:   ["#5a6b8c", "#8a9bbd"],
+  cloudNight: ["#1a2238", "#2f3a57"],
+  rainDay:    ["#3a4a66", "#5a6b85"],
+  rainNight:  ["#161e30", "#28324a"],
+  snowDay:    ["#6a7b9c", "#9fb0cc"],
+  snowNight:  ["#222b45", "#3a4566"],
+  stormDay:   ["#2a3147", "#454d6b"],
+  stormNight: ["#12141f", "#262a3d"],
+};
+
+function pickTheme(code, isDay) {
+  const key = wmoInfo(code)[1];
+  const suffix = isDay ? "Day" : "Night";
+  if (key === "sun" || key === "few") return THEMES["clear" + suffix];
+  if (["rain", "drizzle", "sleet"].includes(key)) return THEMES["rain" + suffix];
+  if (key === "snow") return THEMES["snow" + suffix];
+  if (key === "storm") return THEMES["storm" + suffix];
+  return THEMES["cloud" + suffix];
+}
+
+function applyBackground(code, isDay) {
+  const [top, bot] = pickTheme(code, isDay);
+  document.documentElement.style.setProperty("--bg-top", top);
+  document.documentElement.style.setProperty("--bg-bot", bot);
+  document.getElementById("sky").style.background =
+    `linear-gradient(165deg, ${top}, ${bot})`;
+  document.body.classList.toggle("is-night", !isDay);
+  // theme-color статус-бара под текущий фон (важно для приложения на телефоне)
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", top);
+  spawnParticles(code);
+  // Солнце/луну показываем плавно только ПОСЛЕ того, как фон выставлен под погоду,
+  // — иначе при запуске большое солнце вспыхивало на секунду (см. фикс мигания).
+  if (!document.body.classList.contains("ready")) {
+    requestAnimationFrame(() => document.body.classList.add("ready"));
+  }
+}
+
+// ====== Частицы: дождь / снег ======
+let lastParticleKind = null; // чтобы не пересоздавать частицы при автообновлении, если погода та же
+function spawnParticles(code) {
+  const key = wmoInfo(code)[1];
+  const isRain = ["rain", "drizzle", "storm", "sleet"].includes(key);
+  const isSnow = key === "snow";
+  const kind = isRain ? "rain" : (isSnow ? "snow" : "none");
+
+  // Та же категория осадков, что и в прошлый раз — DOM уже построен, не трогаем (оптимизация).
+  if (kind === lastParticleKind) return;
+  lastParticleKind = kind;
+
+  const box = document.getElementById("particles");
+  box.innerHTML = "";
+  if (kind === "none") return;
+
+  // Оптимизация: меньше частиц, используем DocumentFragment
+  const count = isSnow ? 35 : 50;
+  const fragment = document.createDocumentFragment();
+
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement("div");
+    const left = Math.random() * 100;
+    const delay = Math.random() * 5;
+    if (isSnow) {
+      p.className = "flake";
+      p.textContent = "❄";
+      p.style.cssText = `left:${left}%;font-size:${8 + Math.random() * 12}px;animation-duration:${5 + Math.random() * 6}s;animation-delay:${delay}s`;
+    } else {
+      p.className = "drop";
+      p.style.cssText = `left:${left}%;height:${40 + Math.random() * 40}px;animation-duration:${0.5 + Math.random() * 0.6}s;animation-delay:${delay}s`;
+    }
+    fragment.appendChild(p);
+  }
+  box.appendChild(fragment);
+}
+
+// ====== Часы ======
+function tickClock() {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleTimeString("ru-RU");
+}
+
+function setUpdated(date, stale = false) {
+  const t = date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  document.getElementById("updatedText").textContent = "обновлено в " + t;
+  document.getElementById("pulse").classList.toggle("stale", stale);
+}
+
+// ====== Главный цикл обновления ======
+async function update() {
+  const btn = document.getElementById("refreshBtn");
+  btn.classList.add("spin");
+
+  // Метаданные радара тянем ПАРАЛЛЕЛЬНО с погодой (раньше был await перед погодой —
+  // зависший на VPN RainViewer блокировал загрузку погоды, и были вечные скелетоны).
+  const radarMetaP = fetchRadarMeta().catch(() => null);
+
+  // Для каждого города ПАРАЛЛЕЛЬНО: погода (критично) + ансамбль температур (уточняет
+  // число) + радар (уточняет время осадков). Радар сам дожидается общих метаданных,
+  // но не блокирует погоду — поэтому зависший RainViewer больше не держит загрузку.
+  const results = await Promise.allSettled(CITIES.map(async (city) => {
+    const [bm, ens, radar] = await Promise.allSettled([
+      fetchWeather(city),
+      fetchEnsembleTemps(city),
+      radarMetaP.then((meta) => radarNowcastFor(city, meta)),
+    ]);
+    if (bm.status !== "fulfilled") throw bm.reason; // нет данных — карточка-ошибка
+    const data = bm.value;
+    if (ens.status === "fulfilled") {
+      try { applyEnsemble(data, ens.value); } catch (e) { console.warn("ансамбль пропущен:", e); }
+    }
+    return { data, radar: radar.status === "fulfilled" ? radar.value : null };
+  }));
+
+  const cards = document.getElementById("cards");
+
+  // Собираем все карточки в фрагмент и подменяем за один раз (replaceChildren),
+  // без промежуточного пустого кадра — это убирает мигание при загрузке и автообновлении.
+  const frag = document.createDocumentFragment();
+  let firstCity = null;
+  results.forEach((r, i) => {
+    // Каждый город рисуем ИЗОЛИРОВАННО: если в ответе сервера не хватило поля
+    // (на моргающем VPN ответ нередко приходит неполным) и renderCard падает —
+    // ловим ошибку прямо здесь. Иначе сбой одного города обрывал общий цикл, и
+    // тогда не появлялась НИ ОДНА из трёх карточек — все три «висели» на скелетоне.
+    if (r.status === "fulfilled") {
+      try {
+        const { node, isDay, code } = renderCard(CITIES[i], r.value.data, r.value.radar);
+        frag.appendChild(node);
+        if (i === 0) firstCity = { isDay, code }; // фон по первому городу (Сосновый Бор)
+      } catch (e) {
+        frag.appendChild(renderError(CITIES[i]));
+        console.error("Ошибка отрисовки", CITIES[i].name, e);
+      }
+    } else {
+      frag.appendChild(renderError(CITIES[i]));
+      console.error("Ошибка загрузки", CITIES[i].name, r.reason);
+    }
+  });
+
+  // Анимация «выезда» карточек — только при первой загрузке, без мигания на автообновлении.
+  // Класс ставим ДО вставки (rise использует fill-mode both), чтобы не было вспышки.
+  cards.classList.toggle("intro", firstRender);
+  cards.replaceChildren(frag);
+  firstRender = false;
+
+  if (firstCity) applyBackground(firstCity.code, firstCity.isDay);
+  const anyOk = results.some((r) => r.status === "fulfilled");
+  setUpdated(new Date(), !anyOk);
+  // Если не загрузился НИ ОДИН город — это почти всегда блокировка Open-Meteo
+  // провайдером. Пишем человеку понятную причину, а не молчаливое «обновлено».
+  if (!anyOk) {
+    document.getElementById("updatedText").textContent =
+      PROXY_BASE ? "нет связи с погодой — проверь интернет"
+                 : "Open-Meteo недоступен · нужен VPN или прокси";
+  }
+  lastUpdate = Date.now();
+
+  // Быстрый авто-ретрай, если хоть один город не загрузился — не ждём весь интервал.
+  // Таймер один (не накапливаем), и снимаем его, как только всё загрузилось.
+  const anyFail = results.some((r) => r.status !== "fulfilled");
+  if (anyFail) {
+    if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; update(); }, RETRY_MS);
+  } else if (retryTimer) {
+    clearTimeout(retryTimer); retryTimer = null;
+  }
+
+  setTimeout(() => btn.classList.remove("spin"), 800);
+}
+
+// ====== PWA: установка приложения и service worker ======
+let deferredPrompt = null;
+
+// Запущено ли уже как установленное приложение (с иконки на экране)
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
+}
+
+// Платформа — чтобы показать правильную инструкцию по установке
+function platformKind() {
+  const ua = navigator.userAgent || "";
+  if (/android/i.test(ua)) return "android";
+  if (/iphone|ipad|ipod/i.test(ua) ||
+      (/macintosh/i.test(ua) && "ontouchend" in document)) return "ios";
+  return "desktop";
+}
+
+const INSTALL_STEPS = {
+  android: [
+    "Откройте сайт в Chrome.",
+    "Нажмите меню ⋮ в правом верхнем углу.",
+    "Выберите «Установить приложение» (или «Добавить на главный экран»).",
+    "Подтвердите — на рабочем столе появится отдельная иконка.",
+  ],
+  ios: [
+    "Откройте сайт в Safari.",
+    "Нажмите кнопку «Поделиться» ⬆️ внизу экрана.",
+    "Пролистайте вниз и выберите «На экран „Домой“».",
+    "Нажмите «Добавить» — иконка появится как обычное приложение.",
+  ],
+  desktop: [
+    "Откройте сайт в Chrome или Edge.",
+    "В правой части адресной строки нажмите значок установки ⊕.",
+    "Либо меню браузера → «Установить „Погода“».",
+  ],
+};
+
+function openInstallSheet() {
+  const sheet = document.getElementById("installSheet");
+  if (!sheet) return;
+  const steps = INSTALL_STEPS[platformKind()] || INSTALL_STEPS.desktop;
+  sheet.querySelector(".sheet-steps").innerHTML =
+    steps.map((s) => `<li>${s}</li>`).join("");
+  sheet.hidden = false;
+  requestAnimationFrame(() => sheet.classList.add("open"));
+}
+
+function closeInstallSheet() {
+  const sheet = document.getElementById("installSheet");
+  if (!sheet) return;
+  sheet.classList.remove("open");
+  setTimeout(() => { sheet.hidden = true; }, 250);
+}
+
+function initInstall() {
+  const btn = document.getElementById("installBtn");
+  if (!btn) return;
+
+  // Уже установлено — кнопка не нужна; иначе показываем её всегда
+  btn.hidden = isStandalone();
+
+  // Android/Chrome/Edge: ловим системное приглашение установить
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone()) btn.hidden = false;
+  });
+
+  btn.addEventListener("click", async () => {
+    if (deferredPrompt) {
+      // Нативное окно установки (Android, десктоп)
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if (outcome === "accepted") btn.hidden = true;
+    } else {
+      // iOS и браузеры без авто-установки — показываем пошаговую инструкцию
+      openInstallSheet();
+    }
+  });
+
+  window.addEventListener("appinstalled", () => {
+    btn.hidden = true;
+    deferredPrompt = null;
+    closeInstallSheet();
+  });
+
+  const sheet = document.getElementById("installSheet");
+  if (sheet) {
+    sheet.addEventListener("click", (e) => {
+      if (e.target === sheet || e.target.classList.contains("sheet-close")) {
+        closeInstallSheet();
+      }
+    });
+  }
+}
+
+if ("serviceWorker" in navigator) {
+  // Если уже есть управляющий SW, то его смена = приехало обновление → один тихий reload.
+  // На самой первой установке controller отсутствует, поэтому лишней перезагрузки не будет.
+  if (navigator.serviceWorker.controller) {
+    let swReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (swReloaded) return;
+      swReloaded = true;
+      location.reload();
+    });
+  }
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((err) =>
+      console.warn("SW не зарегистрирован:", err)
+    );
+  });
+}
+
+// ====== Инициализация ======
+let lastUpdate = Date.now();
+let firstRender = true; // анимация появления карточек только при первой загрузке
+let retryTimer = null;  // таймер быстрого повтора при ошибке загрузки
+
+document.getElementById("refreshBtn").addEventListener("click", update);
+initInstall();
+
+tickClock();
+setInterval(tickClock, 1000);
+
+showSkeletons();   // мгновенные заглушки, пока летит первый запрос — никакого пустого экрана
+update();
+setInterval(update, REFRESH_MS);
+
+// Обновляем при возврате на вкладку/в приложение, если данные устарели
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && Date.now() - lastUpdate > REFRESH_MS) {
+    update();
+  }
+});

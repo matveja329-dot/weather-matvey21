@@ -55,6 +55,12 @@
     </div>
   </header>
 
+  <!-- Анонс обновления -->
+  <section class="update-note">
+    <span class="un-badge">Новое</span>
+    <p class="un-text"><b>Глобальное обновление — 24.07 в 16:00.</b> Точность подправлена до идеала: температуру теперь считает ансамбль из 5 мировых моделей (ECMWF, ICON-EU, UKMO, HARMONIE 2 км — берём медиану, ошибка любой модели отбрасывается). Иконки перерисованы — погода различима с одного взгляда.</p>
+  </section>
+
   <main class="grid" id="cards">
     <!-- Карточки городов рендерятся из app.js -->
   </main>
@@ -65,8 +71,8 @@
     <div class="adv-grid">
       <div class="adv-card">
         <div class="adv-icon">🌍</div>
-        <h3>Лучшая модель для точки</h3>
-        <p>Автоматически выбираем самую точную модель высокого разрешения для координат города (ECMWF и локальные модели) — она правильно учитывает побережье и не занижает температуру. Яндекс использует коммерческую модель Meteum.</p>
+        <h3>Ансамбль из 5 моделей</h3>
+        <p>Температура — медиана пяти ведущих моделей мира: ECMWF, ICON-EU, UKMO 10 км и HARMONIE 2 км. Ошибка любой одной модели отбрасывается, побережье не занижает температуру. Яндекс опирается на одну модель Meteum.</p>
       </div>
       <div class="adv-card">
         <div class="adv-icon">⚡</div>
@@ -107,7 +113,7 @@
   </section>
 
   <footer class="foot">
-    <span>Данные: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (ECMWF)</span>
+    <span>Данные: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (ансамбль ECMWF · ICON-EU · UKMO · HARMONIE)</span>
     <span>·</span>
     <span>Обновление каждые 3 минуты · Прогноз на 14 дней · 24-часовой детальный прогноз</span>
     <a class="creator" href="https://t.me/kklaw2" target="_blank" rel="noopener" title="Создатель в Telegram">

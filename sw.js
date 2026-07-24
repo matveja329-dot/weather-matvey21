@@ -1,6 +1,6 @@
 /* Service worker — офлайн-кэш и быстрый запуск как приложение.
    Меняй версию CACHE при обновлении файлов, чтобы кэш сбросился. */
-const CACHE = "pogoda-v8";
+const CACHE = "pogoda-v13";
 
 // Ключ кэша для Open-Meteo без cache-buster `_`: в app.js к каждому запросу
 // добавляется `_: Date.now()`, из-за чего URL всегда уникальный. Без нормализации
@@ -44,6 +44,32 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+
+  // Открытие приложения/страницы (навигация). Сначала пробуем сеть, но при ЛЮБОЙ
+  // осечке (оффлайн, моргнул VPN, GitHub недоступен) отдаём кэш index.html, чтобы
+  // приложение ВСЕГДА открывалось.
+  // Это и есть фикс «белого экрана с VPN»: start_url у приложения = index.html?app=1,
+  // а в кэше лежит index.html без ?app=1 — поэтому раньше offline-поиск промахивался
+  // (?app=1 ≠ index.html) и установленное приложение не запускалось.
+  // ignoreSearch отбрасывает ?app=1 при поиске в кэше.
+  if (req.mode === "navigate") {
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.ok && !res.redirected) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put("./index.html", copy));
+          }
+          return res;
+        })
+        .catch(() =>
+          caches.match(req, { ignoreSearch: true })
+            .then((r) => r || caches.match("./index.html"))
+            .then((r) => r || caches.match("./"))
+        )
+    );
+    return;
+  }
 
   // Радар (RainViewer) — пропускаем мимо SW: тайлы должны остаться CORS-читаемыми для canvas
   if (url.hostname.endsWith("rainviewer.com")) return;

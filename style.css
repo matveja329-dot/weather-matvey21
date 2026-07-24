@@ -111,6 +111,28 @@ body.is-night .sun-moon {
   100% { box-shadow: 0 0 0 0 rgba(89,224,138,0); }
 }
 
+/* ---------- Анонс обновления ---------- */
+.update-note {
+  max-width: 1180px; margin: 0 auto 22px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-radius: 18px;
+  background: linear-gradient(135deg, rgba(89, 224, 138, 0.14), rgba(124, 196, 255, 0.10));
+  border: 1px solid rgba(89, 224, 138, 0.4);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  animation: fade-up 0.7s ease both;
+}
+.un-badge {
+  flex-shrink: 0; font-size: 11px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; color: #0d2b18;
+  background: linear-gradient(135deg, #59e08a, #7cc4ff);
+  padding: 6px 12px; border-radius: 999px;
+}
+.un-text { font-size: 13px; line-height: 1.45; color: var(--muted); }
+.un-text b { color: var(--text); }
+@media (max-width: 640px) {
+  .update-note { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 14px; }
+}
+
 /* ---------- Сетка карточек ---------- */
 .grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
@@ -183,6 +205,26 @@ body.is-night .sun-moon {
 .city-time { font-size: 13px; color: var(--muted); margin-top: 3px; }
 .now-icon { width: 64px; height: 64px; flex-shrink: 0; }
 .now-icon svg { width: 100%; height: 100%; }
+
+/* ====== Лёгкая «жизнь» только крупной иконке (.now-icon). Мелкие в прогнозе — статичны. ====== */
+/* prefers-reduced-motion отключает всё это глобально (см. блок в конце файла). */
+@keyframes wxk-twinkle { 0%,100% { opacity: .7; } 50% { opacity: 1; } }
+@keyframes wxk-pulse   { 0%,100% { opacity: .16; transform: scale(1); } 50% { opacity: .30; transform: scale(1.08); } }
+@keyframes wxk-bob     { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+@keyframes wxk-drift   { 0%,100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
+@keyframes wxk-rainf   { 0% { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(5px); opacity: 0; } }
+@keyframes wxk-snowf   { 0% { transform: translateY(-2px); opacity: .25; } 50% { opacity: 1; } 100% { transform: translateY(5px); opacity: .25; } }
+@keyframes wxk-flash   { 0%,44%,56%,100% { opacity: 1; } 49% { opacity: .25; } 53% { opacity: 1; } }
+
+.now-icon .wx-rays   { animation: wxk-twinkle 3.5s ease-in-out infinite; }
+.now-icon .wx-glow   { transform-box: fill-box; transform-origin: center; animation: wxk-pulse 4s ease-in-out infinite; }
+.now-icon .wx-sun    { transform-box: fill-box; transform-origin: center; animation: wxk-bob 6s ease-in-out infinite; }
+.now-icon .wx-cloud  { animation: wxk-drift 7s ease-in-out infinite; }
+.now-icon .wx-cloud2 { animation: wxk-drift 9s ease-in-out infinite; }
+.now-icon .wx-rain   { animation: wxk-rainf 1.3s ease-in infinite; }
+.now-icon .wx-snow   { animation: wxk-snowf 2.6s ease-in-out infinite; }
+.now-icon .wx-bolt   { animation: wxk-flash 3.5s ease-in-out infinite; }
+.now-icon .wx-fog    { animation: wxk-drift 5s ease-in-out infinite; }
 
 .now { display: flex; align-items: center; gap: 18px; margin: 18px 0 22px; }
 .temp-wrap { display: flex; align-items: flex-start; line-height: 0.9; }
@@ -268,7 +310,7 @@ body.is-night .sun-moon {
 }
 
 /* Подсветка ночных часов, сетка-стебелёк и подписи времени */
-.sp-night { fill: rgba(16, 24, 52, 0.30); }
+.sp-night { fill: rgba(13, 20, 46, 0.12); }   /* лёгкая тень ночных часов, не сплошная плита */
 .sp-stem  { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
 .sp-tick  { fill: var(--muted); font-size: 21px; font-weight: 600; }
 
